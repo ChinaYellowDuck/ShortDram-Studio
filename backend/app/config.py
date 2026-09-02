@@ -1,4 +1,5 @@
 """Application configuration management."""
+import os
 from typing import List
 
 from pydantic import Field
@@ -24,6 +25,9 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "sqlite:///./shortdram.db"
+
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     # CORS
     CORS_ORIGINS: List[str] = Field(
@@ -51,3 +55,20 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def _apply_langsmith_env() -> None:
+    """Propagate LangSmith settings into os.environ.
+
+    LangChain/LangGraph read tracing configuration from actual OS environment
+    variables, not from pydantic Settings. Without this, values loaded from
+    .env would never reach the tracing callback handler.
+    """
+    if settings.LANGCHAIN_TRACING_V2 and settings.LANGCHAIN_API_KEY:
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_API_KEY"] = settings.LANGCHAIN_API_KEY
+        os.environ["LANGCHAIN_PROJECT"] = settings.LANGCHAIN_PROJECT
+        os.environ["LANGCHAIN_ENDPOINT"] = settings.LANGCHAIN_ENDPOINT
+
+
+_apply_langsmith_env()
