@@ -29,13 +29,7 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# 编辑 .env，配置数据库、加密密钥等
-```
-
-生成加密密钥（用于加密 LLM API Key）：
-
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# 编辑 .env，配置数据库等
 ```
 
 ### 3. 初始化数据库
@@ -85,8 +79,9 @@ backend/
 支持多 LLM 配置保存、设默认、使用时切换：
 
 - API: `GET/POST/PUT/DELETE /api/v1/llm-configs`
-- 支持的 Provider: openai, anthropic, deepseek, qwen, zhipu, ollama
-- API Key 使用 Fernet 加密存储
+- 支持的 Provider: openai, anthropic, deepseek, qwen, zhipu, ollama, moonshot
+- 多配置保存、设默认、使用时切换
+- 连通性测试接口
 
 ### 智能体模块
 

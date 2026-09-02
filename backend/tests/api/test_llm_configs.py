@@ -25,13 +25,8 @@ def test_list_configs_empty(client):
     assert data["items"] == []
 
 
-def test_create_config(client, monkeypatch):
+def test_create_config(client):
     """Test creating an LLM configuration."""
-    # Mock encryption to avoid needing ENCRYPTION_KEY
-    from app.utils import crypto
-
-    monkeypatch.setattr(crypto, "encrypt", lambda x: f"encrypted:{x}")
-
     response = client.post(
         "/api/v1/llm-configs",
         json={
@@ -52,12 +47,8 @@ def test_create_config(client, monkeypatch):
     assert "api_key" not in data
 
 
-def test_create_config_unsupported_provider(client, monkeypatch):
+def test_create_config_unsupported_provider(client):
     """Test creating config with unsupported provider."""
-    from app.utils import crypto
-
-    monkeypatch.setattr(crypto, "encrypt", lambda x: f"encrypted:{x}")
-
     response = client.post(
         "/api/v1/llm-configs",
         json={

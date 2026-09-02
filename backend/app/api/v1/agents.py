@@ -39,7 +39,6 @@ async def hello_agent_chat(
     try:
         from app.agents.hello_agent import HelloAgent
         from app.agents.llm import LLMFactory
-        from app.utils.crypto import decrypt
 
         # Get LLM config
         if llm_config_id:
@@ -48,10 +47,9 @@ async def hello_agent_chat(
             config = service.get_default_or_404()
 
         # Create LLM instance
-        api_key = decrypt(config.api_key)
         llm = LLMFactory.create_from_config(
             LLMConfigResponse.model_validate(config),
-            api_key,
+            config.api_key,
         )
 
         # Create and invoke agent

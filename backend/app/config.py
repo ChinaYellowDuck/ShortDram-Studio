@@ -25,9 +25,6 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "sqlite:///./shortdram.db"
 
-    # Encryption
-    ENCRYPTION_KEY: str = Field(default="")
-
     # CORS
     CORS_ORIGINS: List[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:3000"]

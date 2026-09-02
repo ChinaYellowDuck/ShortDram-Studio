@@ -12,7 +12,6 @@ from app.schemas.llm_config import (
     LLMProviderInfo,
     LLMTestResult,
 )
-from app.utils.crypto import decrypt, encrypt
 
 
 # Supported LLM providers
@@ -138,9 +137,6 @@ class LLMConfigService:
                 f"Supported providers: {', '.join(provider_keys)}",
             )
 
-        # Encrypt API key
-        encrypted_api_key = encrypt(config_data.api_key)
-
         # If setting as default, unset existing default
         if config_data.is_default:
             self._unset_existing_default()
@@ -149,7 +145,7 @@ class LLMConfigService:
             name=config_data.name,
             provider=config_data.provider,
             model_name=config_data.model_name,
-            api_key=encrypted_api_key,
+            api_key=config_data.api_key,
             base_url=config_data.base_url,
             is_default=config_data.is_default,
             description=config_data.description,
@@ -177,9 +173,7 @@ class LLMConfigService:
 
         update_data = config_data.model_dump(exclude_unset=True)
 
-        # Encrypt API key if being updated
-        if "api_key" in update_data:
-            update_data["api_key"] = encrypt(update_data["api_key"])
+        # API key is stored as-is (no encryption)
 
         # If setting as default, unset existing default
         if update_data.get("is_default"):
@@ -224,17 +218,6 @@ class LLMConfigService:
         self.db.refresh(db_config)
         return db_config
 
-    def decrypt_api_key(self, config: LLMConfig) -> str:
-        """Get the decrypted API key for a configuration.
-
-        Args:
-            config: LLM configuration.
-
-        Returns:
-            Decrypted API key.
-        """
-        return decrypt(config.api_key)
-
     def _unset_existing_default(self, exclude_id: Optional[int] = None) -> None:
         """Unset the default flag on all configurations except optionally one.
 
@@ -266,7 +249,7 @@ class LLMConfigService:
         try:
             llm = LLMFactory.create_from_config(
                 LLMConfigResponse.model_validate(db_config),
-                decrypt(db_config.api_key),
+                db_config.api_key,
             )
 
             start_time = time.time()
