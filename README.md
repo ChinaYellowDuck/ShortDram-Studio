@@ -1,16 +1,28 @@
-# ShortDram Studio — AI 全流程短剧制作平台
+# ShortDram Studio — AI 智能体全流程短剧制作平台
 
-> 🎬 从创意到成片，一站式 AI 短剧生成解决方案
+> 🎬 从创意到成片，多智能体协同的一站式 AI 短剧生成解决方案
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Status](https://img.shields.io/badge/status-developing-yellow.svg)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
+![LangGraph](https://img.shields.io/badge/🦜🕸️-LangGraph-black)
+![LangChain](https://img.shields.io/badge/🦜🔗-LangChain-green)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?logo=fastapi)
+![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs)
 
-ShortDram Studio 是一款开源的 AI 驱动全流程短剧制作平台，致力于让每个人都能轻松创作高质量的短剧内容。通过集成大语言模型、图像生成、语音合成和视频合成技术，平台覆盖从**剧本创作 → 分镜设计 → 角色设定 → AI 配音 → 视频合成**的完整制作链路。
+ShortDram Studio 是一款开源的 **AI 多智能体驱动**全流程短剧制作平台，基于 LangGraph 构建多智能体协作工作流，致力于让每个人都能轻松创作高质量的短剧内容。通过编排编剧、角色设计、分镜师、配音导演等多个专业智能体协同工作，平台覆盖从**创意构思 → 剧本创作 → 角色设定 → 分镜设计 → AI 配音 → 视频合成**的完整制作链路。
 
 ---
 
 ## ✨ 核心特性
+
+### 🤖 多智能体协作架构
+- **编剧智能体**: 专业剧本创作，支持多题材、多风格，自带三幕式/起承转合结构把控
+- **角色设计智能体**: 角色人设生成 + 形象图绘制，保持角色一致性
+- **分镜师智能体**: 自动拆解剧本为分镜脚本，匹配镜头语言和画面描述
+- **配音导演智能体**: 台词分配、音色选择、情绪调度一站式完成
+- **视频合成智能体**: 统筹画面生成、字幕、BGM、转场，输出最终成片
+- **制片人智能体**: 全局协调 + 质量把控，确保各环节输出符合短剧制作规范
 
 ### 📝 智能剧本创作
 - 支持一句话生成完整短剧剧本（都市、仙侠、甜宠、悬疑等多种题材）
@@ -36,8 +48,9 @@ ShortDram Studio 是一款开源的 AI 驱动全流程短剧制作平台，致�
 - 转场效果智能匹配场景情绪
 - 一键导出竖屏/横屏多种规格
 
-### 🛠️ 项目管理
+### 🛠️ 项目管理与可观测性
 - 多项目并行管理，进度一目了然
+- 基于 LangSmith 的完整智能体运行追踪，每一步决策可回溯
 - 版本历史记录，支持随时回退
 - 团队协作支持（规划中）
 - 模板市场，一键套用热门短剧模板
@@ -47,26 +60,53 @@ ShortDram Studio 是一款开源的 AI 驱动全流程短剧制作平台，致�
 ## 🏗️ 技术架构
 
 ### 前端
-- **框架**: React 18 + TypeScript
+- **框架**: Vue 3 + TypeScript (Composition API)
 - **构建工具**: Vite
-- **UI 组件库**: Ant Design / shadcn-ui
-- **状态管理**: Zustand
+- **UI 组件库**: Element Plus / Naive UI
+- **状态管理**: Pinia
+- **路由**: Vue Router 4
 - **视频预览**: Video.js / Plyr
 
-### 后端
-- **框架**: Node.js (NestJS) / Python (FastAPI) — 双后端架构
+### 后端与 AI 智能体
+- **Web 框架**: FastAPI
+- **AI 框架**: LangChain 1.x + LangGraph
+- **可观测性**: LangSmith（智能体运行追踪、评估、调试）
 - **数据库**: PostgreSQL + Redis
 - **文件存储**: 本地 / S3 兼容对象存储
-- **消息队列**: BullMQ (Redis)
-- **AI 接入层**: 统一适配层，支持多模型厂商切换
+- **任务队列**: Celery + Redis / Arq
+- **视频处理**: FFmpeg
+
+### 多智能体架构
+
+```
+                        ┌─────────────────┐
+                        │  制片人智能体   │  ← 全局协调 + 质量审核
+                        └────────┬────────┘
+                                 │
+        ┌────────────┬───────────┼───────────┬────────────┐
+        ▼            ▼           ▼           ▼            ▼
+   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌──────────┐
+   │ 编剧    │ │ 角色    │ │ 分镜师  │ │ 配音    │ │ 视频合成 │
+   │ 智能体  │ │ 设计    │ │ 智能体  │ │ 导演    │ │ 智能体   │
+   │         │ │ 智能体  │ │         │ │ 智能体  │ │          │
+   └─────────┘ └─────────┘ └─────────┘ └─────────┘ └──────────┘
+```
+
+智能体特性：
+- **有状态执行**: 基于 LangGraph 的状态图，支持断点续跑
+- **人机协作**: 关键节点支持人工介入和审核
+- **工具调用**: 每个智能体可调用图像生成、TTS、视频合成等工具
+- **记忆系统**: 项目级共享记忆 + 智能体私有记忆
+- **可观测性**: 全链路 LangSmith 追踪，每一步决策可审计
 
 ### AI 模型适配
 | 能力 | 支持的模型/服务 |
 |------|----------------|
-| 文本生成 | Claude, GPT-4, 文心一言, 通义千问, DeepSeek |
-| 图像生成 | Stable Diffusion, Midjourney API, DALL·E, 即梦 |
-| 语音合成 | Azure TTS, 讯飞, 阿里云 TTS, Edge TTS |
-| 视频生成 | Sora, Runway, 可灵, 即梦视频 |
+| 文本生成（LLM） | Claude, GPT-4o, 文心一言, 通义千问, DeepSeek |
+| 图像生成 | Stable Diffusion, DALL·E 3, 即梦, 可灵 |
+| 语音合成（TTS） | Azure TTS, 讯飞, 阿里云 TTS, Edge TTS, ElevenLabs |
+| 视频生成 | Sora, Runway, 可灵, 即梦视频, Pika |
+| Embedding | text-embedding, bge-m3 |
 
 ---
 
@@ -74,10 +114,11 @@ ShortDram Studio 是一款开源的 AI 驱动全流程短剧制作平台，致�
 
 ### 环境要求
 - Node.js >= 18.x
-- Python >= 3.10
+- Python >= 3.11
 - PostgreSQL >= 14
 - Redis >= 7
 - FFmpeg（视频合成必需）
+- LangSmith API Key（可选，用于智能体追踪）
 
 ### 本地开发
 
@@ -92,14 +133,15 @@ npm install
 npm run dev
 
 # 安装后端依赖（新开终端）
-cd backend
-npm install
-npm run start:dev
-
-# 安装 AI 服务依赖（新开终端）
-cd ai-service
+cd ../backend
 pip install -r requirements.txt
-python main.py
+
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env，填入 LLM API Key、数据库连接等配置
+
+# 启动后端服务
+uvicorn app.main:app --reload --port 8000
 ```
 
 ### Docker 部署
@@ -109,7 +151,18 @@ python main.py
 docker-compose up -d
 ```
 
-访问 `http://localhost:3000` 即可使用。
+访问 `http://localhost:5173` 即可使用前端，后端 API 文档在 `http://localhost:8000/docs`。
+
+### LangSmith 配置（可选）
+
+开启 LangSmith 可追踪所有智能体的运行过程、token 消耗、错误日志等：
+
+```bash
+# 在 .env 中设置
+export LANGCHAIN_TRACING_V2=true
+export LANGCHAIN_API_KEY=your-api-key
+export LANGCHAIN_PROJECT=shortdram-studio
+```
 
 ---
 
@@ -117,27 +170,38 @@ docker-compose up -d
 
 ```
 ShortDram-Studio/
-├── frontend/              # 前端 Web 应用
+├── frontend/                    # Vue 3 前端应用
 │   ├── src/
-│   │   ├── components/    # 通用组件
-│   │   ├── pages/         # 页面模块
-│   │   ├── stores/        # 状态管理
-│   │   └── utils/         # 工具函数
+│   │   ├── components/          # 通用组件
+│   │   ├── views/               # 页面视图
+│   │   ├── stores/              # Pinia 状态管理
+│   │   ├── router/              # 路由配置
+│   │   ├── api/                 # API 请求封装
+│   │   └── utils/               # 工具函数
 │   └── package.json
-├── backend/               # 业务后端（NestJS）
-│   ├── src/
-│   │   ├── modules/       # 业务模块
-│   │   ├── common/        # 公共组件
-│   │   └── main.ts
-│   └── package.json
-├── ai-service/            # AI 服务（Python/FastAPI）
-│   ├── services/          # AI 模型适配
-│   ├── pipelines/         # 处理流水线
-│   └── main.py
-├── docker/                # Docker 相关配置
-├── docs/                  # 项目文档
-├── .github/               # GitHub Actions 工作流
-├── LICENSE                # MIT 许可证
+├── backend/                     # FastAPI + LangGraph 后端
+│   ├── app/
+│   │   ├── agents/              # 智能体定义
+│   │   │   ├── screenwriter/    # 编剧智能体
+│   │   │   ├── character_designer/  # 角色设计智能体
+│   │   │   ├── storyboarder/    # 分镜师智能体
+│   │   │   ├── voice_director/  # 配音导演智能体
+│   │   │   ├── video_editor/    # 视频合成智能体
+│   │   │   └── producer/        # 制片人协调智能体
+│   │   ├── graphs/              # LangGraph 状态图定义
+│   │   ├── tools/               # 智能体工具集
+│   │   ├── services/            # 业务服务层
+│   │   ├── models/              # 数据模型
+│   │   ├── schemas/             # Pydantic 模式
+│   │   ├── api/                 # API 路由
+│   │   └── main.py              # 应用入口
+│   ├── tests/                   # 测试
+│   ├── requirements.txt
+│   └── .env.example
+├── docker/                      # Docker 相关配置
+├── docs/                        # 项目文档
+├── .github/                     # GitHub Actions 工作流
+├── LICENSE                      # MIT 许可证
 └── README.md
 ```
 
@@ -145,30 +209,39 @@ ShortDram-Studio/
 
 ## 🗺️ 路线图
 
-- [ ] **v0.1** — 剧本生成核心功能
-  - [ ] 基于大模型的短剧剧本生成
-  - [ ] 剧本编辑器（富文本 + 场景分割）
+- [ ] **v0.1** — 智能体框架 + 剧本生成
+  - [ ] LangGraph 多智能体基础框架搭建
+  - [ ] 编剧智能体（剧本生成 + 多轮打磨）
+  - [ ] 制片人协调智能体（流程编排）
+  - [ ] 剧本编辑器（场景分割 + 富文本）
   - [ ] 项目管理基础功能
+  - [ ] LangSmith 可观测性接入
 
-- [ ] **v0.2** — 角色与场景设计
-  - [ ] AI 角色形象生成
+- [ ] **v0.2** — 角色设计 + 分镜智能体
+  - [ ] 角色设计智能体（人设 + 形象图生成）
+  - [ ] 分镜师智能体（剧本转分镜脚本）
   - [ ] 场景概念图生成
   - [ ] 资产管理库
+  - [ ] 人工审核节点（人机协作）
 
-- [ ] **v0.3** — AI 配音
-  - [ ] 多角色语音合成
-  - [ ] 台词自动分配
-  - [ ] 音效与 BGM 匹配
+- [ ] **v0.3** — 配音导演智能体
+  - [ ] 配音导演智能体（台词分配 + 音色匹配）
+  - [ ] 多角色语音合成接入
+  - [ ] 音效与 BGM 自动匹配
+  - [ ] 语音预览与微调
 
-- [ ] **v0.4** — 视频合成
-  - [ ] 分镜视频生成
+- [ ] **v0.4** — 视频合成智能体
+  - [ ] 视频合成智能体（全流程串接）
+  - [ ] 分镜视频/图片生成
   - [ ] 字幕自动生成
-  - [ ] 一键导出
+  - [ ] 一键导出竖屏/横屏
 
 - [ ] **v1.0** — 全流程打通 + 模板市场
-  - [ ] 全流程自动化 Pipeline
+  - [ ] 端到端全自动化 Pipeline
   - [ ] 短剧模板市场
+  - [ ] 质量评估智能体（自动评分）
   - [ ] 团队协作功能
+  - [ ] 插件系统（扩展智能体能力）
 
 ---
 
