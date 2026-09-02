@@ -10,6 +10,8 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-005571?logo=fastapi)
 ![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs)
 
+简体中文 | [English](README.en.md)
+
 ShortDram Studio 是一款开源的 **AI 多智能体驱动**全流程短剧制作平台，基于 LangGraph 构建多智能体协作工作流，致力于让每个人都能轻松创作高质量的短剧内容。通过编排编剧、角色设计、分镜师、配音导演等多个专业智能体协同工作，平台覆盖从**创意构思 → 剧本创作 → 角色设定 → 分镜设计 → AI 配音 → 视频合成**的完整制作链路。
 
 ---
