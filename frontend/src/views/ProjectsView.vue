@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { Delete, Plus, Search } from '@element-plus/icons-vue'
+import { Delete, Edit, Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import { createProject, deleteProject, listProjects } from '../api/projects'
+
+const router = useRouter()
 import { errorMessage } from '../api/client'
 import type { Project, ProjectStatus } from '../api/types'
 
@@ -88,6 +91,10 @@ async function remove(project: Project) {
   }
 }
 
+function openEditor(project: Project) {
+  router.push(`/projects/${project.id}/script`)
+}
+
 function formatTime(value: string): string {
   return new Date(value).toLocaleString('zh-CN')
 }
@@ -133,8 +140,11 @@ onMounted(load)
         <el-table-column label="创建时间" width="180">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="90">
+        <el-table-column label="操作" width="150">
           <template #default="{ row }">
+            <el-button type="primary" link :icon="Edit" @click="openEditor(row)">
+              编辑剧本
+            </el-button>
             <el-button type="danger" link :icon="Delete" @click="remove(row)">
               删除
             </el-button>

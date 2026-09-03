@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.llm_config_service import LLMConfigService
 from app.services.project_service import ProjectService
+from app.services.script_service import ScriptService
 
 DBSession = Annotated[Session, Depends(get_db)]
 
@@ -35,5 +36,18 @@ def get_project_service(db: DBSession) -> ProjectService:
     return ProjectService(db)
 
 
+def get_script_service(db: DBSession) -> ScriptService:
+    """Dependency for ScriptService.
+
+    Args:
+        db: Database session.
+
+    Returns:
+        ScriptService instance.
+    """
+    return ScriptService(db)
+
+
 LLMConfigServiceDep = Annotated[LLMConfigService, Depends(get_llm_config_service)]
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
+ScriptServiceDep = Annotated[ScriptService, Depends(get_script_service)]

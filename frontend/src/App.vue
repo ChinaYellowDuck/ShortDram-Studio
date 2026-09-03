@@ -11,11 +11,12 @@ import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const activeMenu = computed(() => route.path)
+const hideSidebar = computed(() => Boolean(route.meta.hiddenSidebar))
 </script>
 
 <template>
   <el-container class="layout">
-    <el-aside width="220px" class="sidebar">
+    <el-aside v-if="!hideSidebar" width="220px" class="sidebar">
       <div class="logo">🎬 ShortDram Studio</div>
       <el-menu :default-active="activeMenu" router class="menu">
         <el-menu-item index="/">

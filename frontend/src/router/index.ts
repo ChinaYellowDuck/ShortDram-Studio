@@ -16,6 +16,12 @@ const router = createRouter({
       meta: { title: '项目管理' },
     },
     {
+      path: '/projects/:projectId/script',
+      name: 'script-editor',
+      component: () => import('../views/ScriptEditorView.vue'),
+      meta: { title: '剧本编辑器', hiddenSidebar: true },
+    },
+    {
       path: '/llm-configs',
       name: 'llm-configs',
       component: () => import('../views/LlmConfigsView.vue'),

@@ -212,13 +212,13 @@ ShortDram-Studio/
 
 ## 🗺️ Roadmap
 
-- [ ] **v0.1** — Agent Framework + Script Generation
-  - [ ] LangGraph multi-agent foundation
-  - [ ] Screenwriter agent (script generation + iterative refinement)
-  - [ ] Producer coordinator agent (workflow orchestration)
-  - [ ] Script editor (scene splitting + rich text)
-  - [ ] Basic project management
-  - [ ] LangSmith observability integration
+- [x] **v0.1** — Agent Framework + Script Generation
+  - [x] LangGraph multi-agent foundation
+  - [x] Screenwriter agent (script generation + iterative refinement)
+  - [x] Producer coordinator agent (workflow orchestration)
+  - [x] Script editor (scene splitting + structured editing + Fountain preview)
+  - [x] Basic project management
+  - [x] LangSmith observability integration
 
 - [ ] **v0.2** — Character Design + Storyboard Agent
   - [ ] Character designer agent (profile + visual generation)
