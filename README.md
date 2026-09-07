@@ -264,7 +264,9 @@ ShortDram-Studio/
 
 - 📖 [文档中心](docs/)
 - 💡 [提交 Issue](https://github.com/your-username/ShortDram-Studio/issues)
-- 💬 讨论群（微信/Telegram，待开通）
+- 💬 微信交流群：扫码加入，与开发者和用户一起交流
+
+  <img src="docs/image/f7f3ae3a2526fc76d8a899c58b4dbd42_compress.jpg" alt="微信交流群" width="200" />
 
 ---
 
