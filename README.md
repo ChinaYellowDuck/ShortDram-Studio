@@ -284,6 +284,10 @@ ShortDram-Studio/
 - 分享给更多有需要的人
 - 提交 Issue 和 PR 参与贡献
 
+### 📈 Star 历史
+
+[![Star History Chart](https://api.star-history.com/svg?repos=your-username/ShortDram-Studio&type=Date)](https://star-history.com/#your-username/ShortDram-Studio&Date)
+
 ---
 
 > **注意**: 本项目正在积极开发中，功能和 API 可能会发生变化。生产环境使用请等待 v1.0 正式发布。
