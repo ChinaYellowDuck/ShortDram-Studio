@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import {
   ChatDotRound,
+  Connection,
   Cpu,
   DataBoard,
   FolderOpened,
+  MagicStick,
   Setting,
 } from '@element-plus/icons-vue'
 import { computed } from 'vue'
@@ -34,6 +36,14 @@ const hideSidebar = computed(() => Boolean(route.meta.hiddenSidebar))
         <el-menu-item index="/llm-configs">
           <el-icon><Setting /></el-icon>
           <span>LLM 配置</span>
+        </el-menu-item>
+        <el-menu-item index="/mcps">
+          <el-icon><Connection /></el-icon>
+          <span>MCP 管理</span>
+        </el-menu-item>
+        <el-menu-item index="/skills">
+          <el-icon><MagicStick /></el-icon>
+          <span>Skill 管理</span>
         </el-menu-item>
       </el-menu>
       <div class="sidebar-footer">

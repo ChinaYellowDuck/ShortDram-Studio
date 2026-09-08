@@ -57,7 +57,7 @@ uploads/
 *.sqlite3
 
 # AI model files
-models/
+/models/
 *.ckpt
 *.safetensors
 *.pt

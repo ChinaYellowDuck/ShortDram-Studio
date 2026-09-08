@@ -25,6 +25,7 @@ const formRef = ref<FormInstance>()
 const form = reactive({
   name: '',
   provider: '',
+  model_type: 'text' as 'text' | 'image' | 'video' | 'audio',
   model_name: '',
   api_key: '',
   base_url: '',
@@ -75,6 +76,7 @@ async function submitCreate() {
     await createConfig({
       name: form.name,
       provider: form.provider,
+      model_type: form.model_type,
       model_name: form.model_name,
       api_key: form.api_key,
       base_url: form.base_url || null,
@@ -86,6 +88,7 @@ async function submitCreate() {
     Object.assign(form, {
       name: '',
       provider: '',
+      model_type: 'text',
       model_name: '',
       api_key: '',
       base_url: '',
@@ -160,8 +163,8 @@ onMounted(load)
     <el-alert
       type="info"
       :closable="false"
-      title="智能体对话依赖默认 LLM 配置"
-      description="创建配置后请将其设为默认，并可点击「测试」验证连通性。API Key 加密存储，不会在页面展示。"
+      title="文字、图片、视频模型分别拥有各自的默认配置"
+      description="将某条配置设为默认只会替换同类型下的默认项，不影响其他类型。API Key 加密存储，不会在页面展示。"
       style="margin-bottom: 16px"
     />
 
@@ -177,6 +180,11 @@ onMounted(load)
           </template>
         </el-table-column>
         <el-table-column prop="provider" label="提供商" width="120" />
+        <el-table-column label="类型" width="100">
+          <template #default="{ row }">
+            <el-tag size="small">{{ { text: '文字', image: '图片', video: '视频', audio: '音频' }[row.model_type as 'text' | 'image' | 'video' | 'audio'] }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="model_name" label="模型" width="180" />
         <el-table-column prop="base_url" label="Base URL" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ row.base_url || '-' }}</template>
@@ -228,6 +236,14 @@ onMounted(load)
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="模型类型">
+          <el-select v-model="form.model_type" style="width: 100%">
+            <el-option label="文字模型" value="text" />
+            <el-option label="图片模型" value="image" />
+            <el-option label="视频模型" value="video" />
+            <el-option label="音频模型" value="audio" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="模型名称" prop="model_name">
           <el-input v-model="form.model_name" placeholder="例如：deepseek-chat" maxlength="100" />
         </el-form-item>
@@ -248,7 +264,7 @@ onMounted(load)
         <el-form-item label="描述">
           <el-input v-model="form.description" placeholder="可选" maxlength="500" />
         </el-form-item>
-        <el-form-item label="设为默认">
+        <el-form-item label="设为该类型默认">
           <el-switch v-model="form.is_default" />
         </el-form-item>
       </el-form>

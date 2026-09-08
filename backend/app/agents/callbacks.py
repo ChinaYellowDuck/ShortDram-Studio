@@ -54,9 +54,6 @@ class AgentRunCallbackHandler(BaseCallbackHandler):
     steps — only the top-level graph nodes are.
     """
 
-    # Names to skip (graph root / framework-level chains)
-    _SKIP_NAMES = {"LangGraph", "Graph", "Channel", "Pregel"}
-
     def __init__(self, db: Session, run_id: int):
         """
         Args:
@@ -69,7 +66,7 @@ class AgentRunCallbackHandler(BaseCallbackHandler):
         self.service = AgentService(db)
         self.step_counter: Dict[str, int] = {}  # step_name -> occurrences
         self.active_steps: Dict[str, int] = {}  # run_id (callback run id) -> step db id
-        self._node_depth = 0  # track graph node nesting level
+        self.root_run_id: Optional[str] = None  # callback run id of the outer graph
 
     # ── Chain events (graph nodes) ───────────────────────────────────────────
 
@@ -77,22 +74,28 @@ class AgentRunCallbackHandler(BaseCallbackHandler):
         self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs: Any
     ) -> None:
         """Called when a chain (graph node) starts."""
-        name = kwargs.get("run_name") or (serialized or {}).get("name", "unknown")
+        run_id_cb = kwargs.get("run_id")
+        parent_run_id = kwargs.get("parent_run_id")
+        callback_name = kwargs.get("name")
+        metadata = kwargs.get("metadata") or {}
+        node_name = metadata.get("langgraph_node")
 
-        # Skip graph root / framework chains
-        if name in self._SKIP_NAMES or not name:
+        # The outermost LangGraph run has no parent and identifies itself by name.
+        if callback_name == "LangGraph" and parent_run_id is None:
+            self.root_run_id = str(run_id_cb) if run_id_cb else None
             return
 
-        # Heuristic: LangGraph node names are short, descriptive strings.
-        # We treat every chain inside the graph as a node step.
-        # To avoid double-counting (node's internal chains), we only increment
-        # the counter for the first level of chains inside the graph — but since
-        # LangGraph nodes are top-level chains within the graph and internal
-        # LLM calls are on_llm_start, this should be fine.
+        # Only record direct children of the outer graph. Nested graph nodes have
+        # a different parent run id, and ChannelWrite helpers carry a different
+        # callback name than their node, so both are filtered out here.
+        if self.root_run_id is None or str(parent_run_id) != self.root_run_id:
+            return
+        if not node_name or node_name == "__start__" or callback_name != node_name:
+            return
 
         # Compute step_index for this step name
-        self.step_counter[name] = self.step_counter.get(name, 0) + 1
-        step_index = self.step_counter[name]
+        self.step_counter[node_name] = self.step_counter.get(node_name, 0) + 1
+        step_index = self.step_counter[node_name]
 
         # Build input summary
         input_summary = _truncate(inputs, 200)
@@ -100,12 +103,11 @@ class AgentRunCallbackHandler(BaseCallbackHandler):
         try:
             step = self.service.start_step(
                 run_id=self.run_id,
-                step_name=name,
+                step_name=node_name,
                 step_index=step_index,
                 input_summary=input_summary,
             )
             # Track by callback run_id if available
-            run_id_cb = kwargs.get("run_id")
             if run_id_cb:
                 self.active_steps[str(run_id_cb)] = step.id
         except Exception:

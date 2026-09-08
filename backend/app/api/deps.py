@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.agent_service import AgentService
 from app.services.llm_config_service import LLMConfigService
+from app.services.mcp_service import McpService
 from app.services.project_service import ProjectService
 from app.services.script_service import ScriptService
+from app.services.skill_service import SkillService
 
 DBSession = Annotated[Session, Depends(get_db)]
 
@@ -61,7 +63,19 @@ def get_agent_service(db: DBSession) -> AgentService:
     return AgentService(db)
 
 
+def get_mcp_service(db: DBSession) -> McpService:
+    """Dependency for McpService."""
+    return McpService(db)
+
+
+def get_skill_service(db: DBSession) -> SkillService:
+    """Dependency for SkillService."""
+    return SkillService(db)
+
+
 LLMConfigServiceDep = Annotated[LLMConfigService, Depends(get_llm_config_service)]
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
 ScriptServiceDep = Annotated[ScriptService, Depends(get_script_service)]
 AgentServiceDep = Annotated[AgentService, Depends(get_agent_service)]
+McpServiceDep = Annotated[McpService, Depends(get_mcp_service)]
+SkillServiceDep = Annotated[SkillService, Depends(get_skill_service)]

@@ -19,6 +19,7 @@ from app.schemas.llm_config import (
     LLMProviderInfo,
     LLMTestResult,
 )
+from app.schemas.mcp import McpCreate, McpResponse, McpUpdate
 from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 from app.schemas.script import (
     ScriptBase,
@@ -43,6 +44,11 @@ from app.schemas.script import (
     ScriptSceneUpdate,
     ScriptUpdate,
 )
+from app.schemas.skill import (
+    SkillCreate,
+    SkillResponse,
+    SkillUpdate,
+)
 
 __all__ = [
     "PaginatedResponse",
@@ -62,6 +68,9 @@ __all__ = [
     "LLMConfigUpdate",
     "LLMProviderInfo",
     "LLMTestResult",
+    "McpCreate",
+    "McpResponse",
+    "McpUpdate",
     "ProjectCreate",
     "ProjectResponse",
     "ProjectUpdate",
@@ -86,4 +95,7 @@ __all__ = [
     "ScriptDialogueCreate",
     "ScriptDialogueUpdate",
     "ScriptDialogueResponse",
+    "SkillCreate",
+    "SkillResponse",
+    "SkillUpdate",
 ]

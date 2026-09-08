@@ -25,10 +25,13 @@ def list_configs(
     service: LLMConfigServiceDep,
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    model_type: str | None = Query(None, description="模型类型：text/image/video/audio"),
 ):
     """List all LLM configurations with pagination."""
     skip = (page - 1) * page_size
-    configs, total = service.list_configs(skip=skip, limit=page_size)
+    configs, total = service.list_configs(
+        skip=skip, limit=page_size, model_type=model_type
+    )
     total_pages = (total + page_size - 1) // page_size
 
     return PaginatedResponse(
@@ -41,9 +44,12 @@ def list_configs(
 
 
 @router.get("/default", response_model=LLMConfigResponse, summary="获取默认 LLM 配置")
-def get_default_config(service: LLMConfigServiceDep):
-    """Get the default LLM configuration."""
-    return service.get_default_or_404()
+def get_default_config(
+    service: LLMConfigServiceDep,
+    model_type: str = Query("text", description="模型类型：text/image/video/audio"),
+):
+    """Get the default LLM configuration for the given model type."""
+    return service.get_default_or_404(model_type)
 
 
 @router.get("/{config_id}", response_model=LLMConfigResponse, summary="获取单个 LLM 配置详情")

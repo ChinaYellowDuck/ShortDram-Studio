@@ -1,9 +1,9 @@
 """Agent metadata management endpoints."""
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from app.api.deps import AgentServiceDep
 from app.schemas.agent import AgentCreate, AgentResponse, AgentUpdate
-from app.schemas.common import PaginatedResponse, PaginationParams
+from app.schemas.common import PaginatedResponse
 
 router = APIRouter()
 
@@ -11,7 +11,8 @@ router = APIRouter()
 @router.get("", summary="获取智能体列表", response_model=PaginatedResponse[AgentResponse])
 def list_agents(
     service: AgentServiceDep,
-    params: PaginationParams,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     agent_type: str | None = None,
     is_enabled: bool | None = None,
     search: str | None = None,
@@ -23,8 +24,8 @@ def list_agents(
     - **search**: 按名称/描述/key 搜索
     """
     agents, total = service.list_agents(
-        skip=(params.page - 1) * params.page_size,
-        limit=params.page_size,
+        skip=(page - 1) * page_size,
+        limit=page_size,
         agent_type=agent_type,
         is_enabled=is_enabled,
         search=search,
@@ -32,9 +33,9 @@ def list_agents(
     return PaginatedResponse(
         items=agents,
         total=total,
-        page=params.page,
-        page_size=params.page_size,
-        total_pages=(total + params.page_size - 1) // params.page_size,
+        page=page,
+        page_size=page_size,
+        total_pages=(total + page_size - 1) // page_size,
     )
 
 

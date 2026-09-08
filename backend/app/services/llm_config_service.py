@@ -76,15 +76,18 @@ class LLMConfigService:
             )
         return config
 
-    def get_default(self) -> Optional[LLMConfig]:
-        """Get the default LLM configuration.
+    def get_default(self, model_type: Optional[str] = None) -> Optional[LLMConfig]:
+        """Get the default LLM configuration for a model type.
 
         Returns:
             Default LLMConfig if one exists, None otherwise.
         """
-        return self.db.query(LLMConfig).filter(LLMConfig.is_default == True).first()  # noqa: E712
+        query = self.db.query(LLMConfig).filter(LLMConfig.is_default == True)  # noqa: E712
+        if model_type:
+            query = query.filter(LLMConfig.model_type == model_type)
+        return query.first()
 
-    def get_default_or_404(self) -> LLMConfig:
+    def get_default_or_404(self, model_type: Optional[str] = None) -> LLMConfig:
         """Get the default LLM config, raising 404 if none exists.
 
         Returns:
@@ -93,15 +96,20 @@ class LLMConfigService:
         Raises:
             HTTPException: 404 if no default config exists.
         """
-        config = self.get_default()
+        config = self.get_default(model_type)
         if not config:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="No default LLM configuration found. Please create one first.",
+                detail=(
+                    f"No default {model_type or ''} LLM configuration found. "
+                    "Please create one first."
+                ),
             )
         return config
 
-    def list_configs(self, skip: int = 0, limit: int = 100) -> tuple[List[LLMConfig], int]:
+    def list_configs(
+        self, skip: int = 0, limit: int = 100, model_type: Optional[str] = None
+    ) -> tuple[List[LLMConfig], int]:
         """List all LLM configurations with pagination.
 
         Args:
@@ -112,6 +120,8 @@ class LLMConfigService:
             Tuple of (configs list, total count).
         """
         query = self.db.query(LLMConfig)
+        if model_type:
+            query = query.filter(LLMConfig.model_type == model_type)
         total = query.count()
         configs = query.order_by(LLMConfig.is_default.desc(), LLMConfig.created_at.desc()).offset(skip).limit(limit).all()
         return configs, total
@@ -137,13 +147,14 @@ class LLMConfigService:
                 f"Supported providers: {', '.join(provider_keys)}",
             )
 
-        # If setting as default, unset existing default
+        # If setting as default, unset the existing default for this model type.
         if config_data.is_default:
-            self._unset_existing_default()
+            self._unset_existing_default(model_type=config_data.model_type)
 
         db_config = LLMConfig(
             name=config_data.name,
             provider=config_data.provider,
+            model_type=config_data.model_type,
             model_name=config_data.model_name,
             api_key=config_data.api_key,
             base_url=config_data.base_url,
@@ -175,9 +186,14 @@ class LLMConfigService:
 
         # API key is stored as-is (no encryption)
 
-        # If setting as default, unset existing default
-        if update_data.get("is_default"):
-            self._unset_existing_default(exclude_id=config_id)
+        # Ensure only one default per model type.
+        target_model_type = update_data.get("model_type", db_config.model_type)
+        if update_data.get("is_default") or (
+            db_config.is_default and "model_type" in update_data
+        ):
+            self._unset_existing_default(
+                exclude_id=config_id, model_type=target_model_type
+            )
 
         for field, value in update_data.items():
             setattr(db_config, field, value)
@@ -212,19 +228,28 @@ class LLMConfigService:
             HTTPException: 404 if config not found.
         """
         db_config = self.get_by_id_or_404(config_id)
-        self._unset_existing_default(exclude_id=config_id)
+        self._unset_existing_default(
+            exclude_id=config_id, model_type=db_config.model_type
+        )
         db_config.is_default = True
         self.db.commit()
         self.db.refresh(db_config)
         return db_config
 
-    def _unset_existing_default(self, exclude_id: Optional[int] = None) -> None:
-        """Unset the default flag on all configurations except optionally one.
+    def _unset_existing_default(
+        self, exclude_id: Optional[int] = None, model_type: Optional[str] = None
+    ) -> None:
+        """Unset the default flag on matching configurations.
+
+        The flag is cleared only for the given model type, so each type keeps its
+        own independent default.
 
         Args:
             exclude_id: Optional ID to exclude from unsetting.
         """
         query = self.db.query(LLMConfig).filter(LLMConfig.is_default == True)  # noqa: E712
+        if model_type:
+            query = query.filter(LLMConfig.model_type == model_type)
         if exclude_id is not None:
             query = query.filter(LLMConfig.id != exclude_id)
         for config in query.all():

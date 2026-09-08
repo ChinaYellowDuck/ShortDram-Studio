@@ -21,6 +21,8 @@ class AgentBase(BaseModel):
     is_enabled: bool = Field(True, description="Whether the agent is enabled")
     default_llm_config_id: Optional[int] = Field(None, description="Default LLM config ID")
     default_params: Optional[Dict[str, Any]] = Field(None, description="Default parameters JSON")
+    temperature: float = Field(0.7, ge=0, le=2, description="Model temperature (0-2)")
+    system_message: Optional[str] = Field(None, description="System prompt override")
     version: str = Field("1.0", max_length=20, description="Agent version")
 
 
@@ -41,6 +43,10 @@ class AgentUpdate(BaseModel):
     is_enabled: Optional[bool] = None
     default_llm_config_id: Optional[int] = None
     default_params: Optional[Dict[str, Any]] = None
+    temperature: Optional[float] = Field(None, ge=0, le=2)
+    system_message: Optional[str] = None
+    mcp_ids: Optional[list[int]] = None
+    skill_ids: Optional[list[int]] = None
     version: Optional[str] = Field(None, max_length=20)
 
 
@@ -48,6 +54,8 @@ class AgentResponse(AgentBase):
     """Schema for agent response."""
 
     id: int
+    mcp_ids: list[int] = Field(default_factory=list)
+    skill_ids: list[int] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

@@ -6,6 +6,9 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.agent import Agent, AgentRun, AgentRunStep, RunStatus, StepStatus
+from app.models.llm_config import LLMConfig
+from app.models.mcp import Mcp
+from app.models.skill import Skill
 from app.schemas.agent import (
     AgentCreate,
     AgentRunCreate,
@@ -92,6 +95,7 @@ class AgentService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Agent with key '{data.agent_key}' already exists",
             )
+        self._validate_default_llm(data.default_llm_config_id)
 
         db_agent = Agent(
             agent_key=data.agent_key,
@@ -102,6 +106,8 @@ class AgentService:
             is_enabled=data.is_enabled,
             default_llm_config_id=data.default_llm_config_id,
             default_params=data.default_params,
+            temperature=data.temperature,
+            system_message=data.system_message,
             version=data.version,
         )
         self.db.add(db_agent)
@@ -113,6 +119,8 @@ class AgentService:
         """Update an existing agent."""
         agent = self.get_by_id_or_404(agent_id)
         update_data = data.model_dump(exclude_unset=True)
+        if "default_llm_config_id" in update_data:
+            self._validate_default_llm(update_data["default_llm_config_id"])
 
         # If changing agent_key, check uniqueness
         if "agent_key" in update_data and update_data["agent_key"] != agent.agent_key:
@@ -123,16 +131,51 @@ class AgentService:
                     detail=f"Agent with key '{update_data['agent_key']}' already exists",
                 )
 
+        mcp_ids = update_data.pop("mcp_ids", None)
+        skill_ids = update_data.pop("skill_ids", None)
+
         for field, value in update_data.items():
             setattr(agent, field, value)
+
+        if mcp_ids is not None:
+            agent.mcps = self._resolve_mcps(mcp_ids)
+        if skill_ids is not None:
+            agent.skills = self._resolve_skills(skill_ids)
 
         self.db.commit()
         self.db.refresh(agent)
         return agent
 
+    def _resolve_mcps(self, mcp_ids: list[int]) -> list[Mcp]:
+        """Resolve and validate a list of MCP IDs."""
+        if not mcp_ids:
+            return []
+        mcps = self.db.query(Mcp).filter(Mcp.id.in_(mcp_ids)).all()
+        if len(mcps) != len(set(mcp_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="One or more MCP server IDs do not exist",
+            )
+        return mcps
+
+    def _resolve_skills(self, skill_ids: list[int]) -> list[Skill]:
+        """Resolve and validate a list of skill IDs."""
+        if not skill_ids:
+            return []
+        skills = self.db.query(Skill).filter(Skill.id.in_(skill_ids)).all()
+        if len(skills) != len(set(skill_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="One or more skill IDs do not exist",
+            )
+        return skills
+
     def delete(self, agent_id: int) -> None:
         """Delete an agent."""
         agent = self.get_by_id_or_404(agent_id)
+        self.db.query(AgentRun).filter(AgentRun.agent_id == agent_id).update(
+            {AgentRun.agent_id: None}, synchronize_session=False
+        )
         self.db.delete(agent)
         self.db.commit()
 
@@ -143,6 +186,76 @@ class AgentService:
         self.db.commit()
         self.db.refresh(agent)
         return agent
+
+    def _validate_default_llm(self, config_id: Optional[int]) -> None:
+        """Ensure an agent default references an existing text model."""
+        if config_id is None:
+            return
+        config = self.db.query(LLMConfig).filter(LLMConfig.id == config_id).first()
+        if not config:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"LLM configuration with id {config_id} not found",
+            )
+        if config.model_type != "text":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Agent default LLM configuration must be a text model",
+            )
+
+    def resolve_llm_config(
+        self, agent: Agent, requested_config_id: Optional[int] = None
+    ) -> LLMConfig:
+        """Resolve the text model used for an execution.
+
+        Explicit request overrides the agent default, which overrides the
+        global default configuration.
+        """
+        if not agent.is_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Agent '{agent.agent_key}' is disabled",
+            )
+        config_id = requested_config_id or agent.default_llm_config_id
+        if config_id is not None:
+            config = self.db.query(LLMConfig).filter(LLMConfig.id == config_id).first()
+        else:
+            config = (
+                self.db.query(LLMConfig)
+                .filter(LLMConfig.is_default == True, LLMConfig.model_type == "text")  # noqa: E712
+                .first()
+            )
+        if not config:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No LLM configuration available for this agent",
+            )
+        if config.model_type != "text":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Agent execution requires a text model",
+            )
+        return config
+
+    def resolve_params(
+        self,
+        agent: Agent,
+        request_data: dict,
+        provided_fields: Optional[set] = None,
+    ) -> dict:
+        """Backfill agent defaults for request fields the caller omitted.
+
+        Explicitly provided fields are left untouched, so a caller's value always
+        wins over the agent's stored defaults. Only fields absent from
+        ``provided_fields`` are filled from ``agent.default_params``.
+        """
+        defaults = agent.default_params or {}
+        provided_fields = provided_fields or set()
+        result = dict(request_data)
+        for key, value in defaults.items():
+            if key not in provided_fields:
+                result[key] = value
+        return result
 
     # ── Agent Run CRUD ────────────────────────────────────────────────────────
 

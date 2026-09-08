@@ -1,7 +1,7 @@
 """Agent execution endpoints."""
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.deps import AgentServiceDep, LLMConfigServiceDep, ProjectServiceDep, ScriptServiceDep
+from app.api.deps import AgentServiceDep, ProjectServiceDep, ScriptServiceDep
 from app.models.script import CharacterType, Emotion, IntExt, TimeOfDay
 from app.schemas.llm_config import LLMConfigResponse
 from app.schemas.project import ProjectCreate
@@ -15,6 +15,44 @@ from app.schemas.script import (
 )
 
 router = APIRouter()
+
+
+def _screenwriter_state(idea: str, genre: str, style: str, num_scenes: int) -> dict:
+    """Build the initial state for the screenwriter graph."""
+    return {
+        "idea": idea,
+        "genre": genre,
+        "style": style or "",
+        "num_scenes": num_scenes,
+        "logline": "",
+        "synopsis": "",
+        "characters": [],
+        "scene_outlines": [],
+        "current_scene_index": 0,
+        "scenes": [],
+        "review": {},
+        "current_stage": "starting",
+        "error": "",
+    }
+
+
+def _producer_state(
+    idea: str, genre: str, style: str, num_scenes: int, llm
+) -> dict:
+    """Build the initial state for the producer graph."""
+    project_name = idea[:20].strip() + "..." if len(idea) > 20 else idea
+    return {
+        "project_name": project_name,
+        "idea": idea,
+        "genre": genre,
+        "style": style or "",
+        "num_scenes": num_scenes,
+        "llm": llm,
+        "validation": {},
+        "script_result": {},
+        "current_stage": "starting",
+        "error": "",
+    }
 
 
 @router.get("/list", summary="获取可用智能体列表")
@@ -35,12 +73,147 @@ def list_agents(service: AgentServiceDep):
     ]
 
 
+# ── Generic Agent Chat ──────────────────────────────────────────────────────
+
+
+@router.post("/chat", summary="智能体对话测试")
+async def agent_chat(
+    agent_service: AgentServiceDep,
+    agent_key: str,
+    message: str,
+    llm_config_id: int | None = None,
+):
+    """Run a conversation-style test against any agent.
+
+    For dialog agents the message is used directly; for creative agents the
+    message is treated as the creative idea.
+    """
+    run_id: int | None = None
+    try:
+        from app.agents.llm import LLMFactory
+
+        agent_meta = agent_service.get_by_key_or_404(agent_key)
+        config = agent_service.resolve_llm_config(agent_meta, llm_config_id)
+        llm = LLMFactory.create_from_config(
+            LLMConfigResponse.model_validate(config),
+            config.api_key,
+        )
+
+        agent_id = agent_meta.id
+        llm_config_id = config.id
+        llm_model_name = config.model_name
+
+        if agent_key == "hello_agent":
+            from langchain_core.messages import HumanMessage
+
+            from app.agents.hello_agent import HelloAgent
+
+            agent = HelloAgent(llm)
+            input_data = {"messages": [HumanMessage(content=message)]}
+            result, run_id = await agent.ainvoke_with_run(
+                input_data=input_data,
+                db=agent_service.db,
+                agent_id=agent_id,
+                llm_config_id=llm_config_id,
+                llm_model_name=llm_model_name,
+            )
+            response = result.get("greeting", "")
+
+        elif agent_key == "screenwriter":
+            from app.agents.screenwriter import ScreenwriterAgent
+
+            params = agent_service.resolve_params(
+                agent_meta,
+                {"genre": "都市", "style": "", "num_scenes": 3},
+                provided_fields=set(),
+            )
+            agent = ScreenwriterAgent(llm)
+            input_data = _screenwriter_state(
+                message, params["genre"], params["style"], params["num_scenes"]
+            )
+            result, run_id = await agent.ainvoke_with_run(
+                input_data=input_data,
+                db=agent_service.db,
+                agent_id=agent_id,
+                llm_config_id=llm_config_id,
+                llm_model_name=llm_model_name,
+            )
+            response = "\n\n".join(
+                part for part in (result.get("logline"), result.get("synopsis")) if part
+            ).strip()
+
+        elif agent_key == "producer":
+            from app.agents.producer import ProducerAgent
+
+            params = agent_service.resolve_params(
+                agent_meta,
+                {"genre": "都市", "style": "", "num_scenes": 3},
+                provided_fields=set(),
+            )
+            agent = ProducerAgent(llm)
+            input_data = _producer_state(
+                message, params["genre"], params["style"], params["num_scenes"], llm
+            )
+            result, run_id = await agent.ainvoke_with_run(
+                input_data=input_data,
+                db=agent_service.db,
+                agent_id=agent_id,
+                llm_config_id=llm_config_id,
+                llm_model_name=llm_model_name,
+            )
+            script = result.get("script_result", {})
+            response = "\n".join(
+                part
+                for part in (
+                    f"项目：{result.get('project_name', '')}",
+                    f"梗概：{script.get('logline', '')}",
+                    f"大纲：{script.get('synopsis', '')}",
+                )
+                if part
+            ).strip()
+
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Agent '{agent_key}' does not support chat",
+            )
+
+        return {
+            "agent": agent_key,
+            "run_id": run_id,
+            "message": message,
+            "response": response,
+            "llm_config": {
+                "id": config.id,
+                "name": config.name,
+                "provider": config.provider,
+                "model": config.model_name,
+            },
+        }
+
+    except HTTPException:
+        raise
+    except ImportError as e:
+        if run_id is not None:
+            agent_service.fail_run(run_id, str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Agent dependencies not available: {e}",
+        ) from e
+    except Exception as e:
+        if run_id is not None:
+            agent_service.fail_run(run_id, str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Agent chat failed: {str(e)}",
+        ) from e
+
+
 # ── Hello Agent ─────────────────────────────────────────────────────────────
 
 
 @router.post("/hello/chat", summary="Hello Agent 对话（测试用）")
 async def hello_agent_chat(
-    service: LLMConfigServiceDep,
     agent_service: AgentServiceDep,
     message: str,
     llm_config_id: int | None = None,
@@ -58,14 +231,9 @@ async def hello_agent_chat(
         from app.agents.llm import LLMFactory
 
         # Look up agent metadata
-        agent_meta = agent_service.get_by_key("hello_agent")
-        agent_id = agent_meta.id if agent_meta else None
-
-        # Get LLM config
-        if llm_config_id:
-            config = service.get_by_id_or_404(llm_config_id)
-        else:
-            config = service.get_default_or_404()
+        agent_meta = agent_service.get_by_key_or_404("hello_agent")
+        agent_id = agent_meta.id
+        config = agent_service.resolve_llm_config(agent_meta, llm_config_id)
 
         # Create LLM instance
         llm = LLMFactory.create_from_config(
@@ -111,7 +279,6 @@ async def hello_agent_chat(
 @router.post("/screenwriter/generate", summary="编剧智能体：生成剧本")
 async def screenwriter_generate(
     req: ScriptGenerateRequest,
-    llm_service: LLMConfigServiceDep,
     agent_service: AgentServiceDep,
 ):
     """
@@ -123,19 +290,15 @@ async def screenwriter_generate(
     - **num_scenes**: 生成场景数量（默认10）
     - **llm_config_id**: 可选，指定LLM配置
     """
+    run_id: int | None = None
     try:
         from app.agents.llm import LLMFactory
         from app.agents.screenwriter import ScreenwriterAgent
 
         # Look up agent metadata
-        agent_meta = agent_service.get_by_key("screenwriter")
-        agent_id = agent_meta.id if agent_meta else None
-
-        # Get LLM config
-        if req.llm_config_id:
-            config = llm_service.get_by_id_or_404(req.llm_config_id)
-        else:
-            config = llm_service.get_default_or_404()
+        agent_meta = agent_service.get_by_key_or_404("screenwriter")
+        agent_id = agent_meta.id
+        config = agent_service.resolve_llm_config(agent_meta, req.llm_config_id)
 
         # Create LLM instance
         llm = LLMFactory.create_from_config(
@@ -143,12 +306,20 @@ async def screenwriter_generate(
             config.api_key,
         )
 
+        # Apply the agent's stored defaults only for fields the caller omitted.
+        provided_fields = set(req.model_fields_set)
+        params = agent_service.resolve_params(
+            agent_meta,
+            {"genre": req.genre, "style": req.style, "num_scenes": req.num_scenes},
+            provided_fields=provided_fields,
+        )
+
         # Build initial state
         initial_state = {
             "idea": req.idea,
-            "genre": req.genre,
-            "style": req.style or "",
-            "num_scenes": req.num_scenes,
+            "genre": params["genre"],
+            "style": params["style"] or "",
+            "num_scenes": params["num_scenes"],
             "logline": "",
             "synopsis": "",
             "characters": [],
@@ -208,7 +379,6 @@ async def screenwriter_generate(
 @router.post("/screenwriter/refine", summary="编剧智能体：打磨场景/剧本")
 async def screenwriter_refine(
     req: ScriptRefineRequest,
-    llm_service: LLMConfigServiceDep,
     script_service: ScriptServiceDep,
     agent_service: AgentServiceDep,
 ):
@@ -229,8 +399,8 @@ async def screenwriter_refine(
         from app.agents.screenwriter import ScreenwriterAgent
 
         # Look up agent metadata
-        agent_meta = agent_service.get_by_key("screenwriter")
-        agent_id = agent_meta.id if agent_meta else None
+        agent_meta = agent_service.get_by_key_or_404("screenwriter")
+        agent_id = agent_meta.id
 
         # Get script for context
         script = script_service.get_detail(req.script_id)
@@ -297,10 +467,7 @@ async def screenwriter_refine(
         }
 
         # Get LLM config
-        if req.llm_config_id:
-            config = llm_service.get_by_id_or_404(req.llm_config_id)
-        else:
-            config = llm_service.get_default_or_404()
+        config = agent_service.resolve_llm_config(agent_meta, req.llm_config_id)
 
         # Create LLM instance
         llm = LLMFactory.create_from_config(
@@ -313,13 +480,13 @@ async def screenwriter_refine(
             AgentRunCreate(
                 agent_id=agent_id,
                 project_id=script.project_id,
-                status="running",
                 llm_config_id=config.id,
                 llm_model_name=config.model_name,
                 input_summary=f"Refine scene {scene.scene_number}: {req.feedback[:200]}",
             )
         )
         run_id = run.id
+        agent_service.start_run(run_id)
 
         # Create a single step for the refine operation
         step = agent_service.start_step(
@@ -395,7 +562,6 @@ async def screenwriter_refine(
 @router.post("/producer/create-project", summary="制片人智能体：从创意创建项目")
 async def producer_create_project(
     req: ScriptGenerateRequest,
-    llm_service: LLMConfigServiceDep,
     project_service: ProjectServiceDep,
     script_service: ScriptServiceDep,
     agent_service: AgentServiceDep,
@@ -419,14 +585,9 @@ async def producer_create_project(
         from app.agents.producer import ProducerAgent
 
         # Look up agent metadata
-        agent_meta = agent_service.get_by_key("producer")
-        agent_id = agent_meta.id if agent_meta else None
-
-        # Get LLM config
-        if req.llm_config_id:
-            config = llm_service.get_by_id_or_404(req.llm_config_id)
-        else:
-            config = llm_service.get_default_or_404()
+        agent_meta = agent_service.get_by_key_or_404("producer")
+        agent_id = agent_meta.id
+        config = agent_service.resolve_llm_config(agent_meta, req.llm_config_id)
 
         # Create LLM instance
         llm = LLMFactory.create_from_config(
@@ -449,6 +610,7 @@ async def producer_create_project(
             "genre": req.genre,
             "style": req.style or "",
             "num_scenes": req.num_scenes,
+            "llm": llm,
             "validation": {},
             "script_result": {},
             "current_stage": "starting",
@@ -474,7 +636,7 @@ async def producer_create_project(
                 detail=result["error"],
             )
 
-        script_result = result.get("script", {})
+        script_result = result.get("script_result", {})
 
         # Save project to database
         project = project_service.create(
@@ -625,11 +787,15 @@ async def producer_create_project(
     except HTTPException:
         raise
     except ImportError as e:
+        if run_id is not None:
+            agent_service.fail_run(run_id, str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Agent dependencies not available: {e}",
         ) from e
     except Exception as e:
+        if run_id is not None:
+            agent_service.fail_run(run_id, str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Project creation failed: {str(e)}",

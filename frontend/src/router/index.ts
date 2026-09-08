@@ -33,6 +33,18 @@ const router = createRouter({
       component: () => import('../views/AgentsView.vue'),
       meta: { title: '智能体' },
     },
+    {
+      path: '/mcps',
+      name: 'mcps',
+      component: () => import('../views/McpView.vue'),
+      meta: { title: 'MCP 管理' },
+    },
+    {
+      path: '/skills',
+      name: 'skills',
+      component: () => import('../views/SkillView.vue'),
+      meta: { title: 'Skill 管理' },
+    },
   ],
 })
 

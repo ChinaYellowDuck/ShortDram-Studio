@@ -1,6 +1,6 @@
 """Pydantic schemas for LLM configuration."""
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -10,7 +10,9 @@ class LLMConfigBase(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100, description="Configuration display name")
     provider: str = Field(..., min_length=1, max_length=50, description="LLM provider type")
-    model_type: str = Field("text", max_length=20, description="Model type: text/image/video/audio")
+    model_type: Literal["text", "image", "video", "audio"] = Field(
+        "text", description="Model type: text/image/video/audio"
+    )
     model_name: str = Field(..., min_length=1, max_length=100, description="Model name/identifier")
     base_url: Optional[str] = Field(None, max_length=500, description="Custom API base URL")
     description: Optional[str] = Field(None, max_length=500, description="Configuration description")
@@ -31,7 +33,9 @@ class LLMConfigUpdate(BaseModel):
 
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     provider: Optional[str] = Field(None, min_length=1, max_length=50)
-    model_type: Optional[str] = Field(None, max_length=20, description="Model type: text/image/video/audio")
+    model_type: Optional[Literal["text", "image", "video", "audio"]] = Field(
+        None, description="Model type: text/image/video/audio"
+    )
     model_name: Optional[str] = Field(None, min_length=1, max_length=100)
     api_key: Optional[str] = Field(None, min_length=1, description="New API key (will be encrypted)")
     base_url: Optional[str] = Field(None, max_length=500)

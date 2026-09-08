@@ -3,6 +3,27 @@
 import pytest
 
 
+def _create_config(
+    client,
+    name: str,
+    model_type: str = "text",
+    is_default: bool = False,
+) -> int:
+    response = client.post(
+        "/api/v1/llm-configs",
+        json={
+            "name": name,
+            "provider": "openai",
+            "model_type": model_type,
+            "model_name": "test-model",
+            "api_key": "test-key",
+            "is_default": is_default,
+        },
+    )
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
 def test_get_providers(client):
     """Test getting supported LLM providers."""
     response = client.get("/api/v1/llm-configs/providers")
@@ -63,5 +84,72 @@ def test_create_config_unsupported_provider(client):
 
 def test_get_default_config_empty(client):
     """Test getting default config when none exists."""
-    response = client.get("/api/v1/llm-configs/default")
+    response = client.get("/api/v1/llm-configs/default", params={"model_type": "text"})
     assert response.status_code == 404
+
+
+def test_default_is_scoped_per_model_type(client):
+    """A default applies only within its model type."""
+    text_id = _create_config(client, "文字默认", "text", is_default=True)
+    image_id = _create_config(client, "图片默认", "image", is_default=True)
+
+    assert client.get(f"/api/v1/llm-configs/{text_id}").json()["is_default"] is True
+    assert client.get(f"/api/v1/llm-configs/{image_id}").json()["is_default"] is True
+
+    text2_id = _create_config(client, "文字默认2", "text")
+    response = client.post(f"/api/v1/llm-configs/{text2_id}/set-default")
+    assert response.status_code == 200
+
+    assert client.get(f"/api/v1/llm-configs/{text_id}").json()["is_default"] is False
+    assert client.get(f"/api/v1/llm-configs/{text2_id}").json()["is_default"] is True
+    assert client.get(f"/api/v1/llm-configs/{image_id}").json()["is_default"] is True
+
+
+def test_get_default_by_model_type(client):
+    """The default endpoint resolves per model type."""
+    _create_config(client, "文字默认", "text", is_default=True)
+    _create_config(client, "图片默认", "image", is_default=True)
+
+    text_response = client.get("/api/v1/llm-configs/default", params={"model_type": "text"})
+    image_response = client.get("/api/v1/llm-configs/default", params={"model_type": "image"})
+
+    assert text_response.status_code == 200
+    assert text_response.json()["name"] == "文字默认"
+    assert image_response.status_code == 200
+    assert image_response.json()["name"] == "图片默认"
+
+
+def test_create_and_filter_configs_by_model_type(client):
+    """Model type is persisted and can be used to filter configurations."""
+    for name, model_type in (("文本模型", "text"), ("绘图模型", "image")):
+        response = client.post(
+            "/api/v1/llm-configs",
+            json={
+                "name": name,
+                "provider": "openai",
+                "model_type": model_type,
+                "model_name": "test-model",
+                "api_key": "test-key",
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["model_type"] == model_type
+
+    response = client.get("/api/v1/llm-configs", params={"model_type": "image"})
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["name"] == "绘图模型"
+
+
+def test_rejects_unknown_model_type(client):
+    response = client.post(
+        "/api/v1/llm-configs",
+        json={
+            "name": "未知类型",
+            "provider": "openai",
+            "model_type": "unknown",
+            "model_name": "test-model",
+            "api_key": "test-key",
+        },
+    )
+    assert response.status_code == 422

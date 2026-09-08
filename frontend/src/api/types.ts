@@ -31,6 +31,7 @@ export interface LLMConfig {
   id: number
   name: string
   provider: string
+  model_type: 'text' | 'image' | 'video' | 'audio'
   model_name: string
   base_url: string | null
   description: string | null
@@ -42,6 +43,7 @@ export interface LLMConfig {
 export interface LLMConfigCreate {
   name: string
   provider: string
+  model_type?: 'text' | 'image' | 'video' | 'audio'
   model_name: string
   api_key: string
   base_url?: string | null
@@ -64,14 +66,75 @@ export interface LLMTestResult {
 }
 
 export interface AgentInfo {
-  id: string
+  id: number
+  agent_key: string
   name: string
   description: string
   status: string
+  category: string
+  default_llm_config_id: number | null
+}
+
+export interface AgentMetadata {
+  id: number
+  agent_key: string
+  name: string
+  description: string | null
+  agent_type: string
+  category: string | null
+  is_enabled: boolean
+  default_llm_config_id: number | null
+  default_params: Record<string, unknown> | null
+  temperature: number
+  system_message: string | null
+  mcp_ids: number[]
+  skill_ids: number[]
+  version: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Mcp {
+  id: number
+  name: string
+  url: string
+  transport: string
+  config: Record<string, unknown> | null
+  description: string | null
+  is_enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface McpCreate {
+  name: string
+  url: string
+  transport?: string
+  config?: Record<string, unknown> | null
+  description?: string | null
+  is_enabled?: boolean
+}
+
+export interface Skill {
+  id: number
+  name: string
+  description: string | null
+  content: string
+  is_enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SkillCreate {
+  name: string
+  description?: string | null
+  content: string
+  is_enabled?: boolean
 }
 
 export interface AgentChatResponse {
   agent: string
+  run_id: number
   message: string
   response: string
   llm_config: {
@@ -309,6 +372,7 @@ export interface ScriptGenerateResult {
 
 export interface ScriptGenerateResponse {
   agent: string
+  run_id: number
   llm_config: {
     id: number
     name: string
@@ -320,6 +384,7 @@ export interface ScriptGenerateResponse {
 
 export interface ProducerCreateResponse {
   agent: string
+  run_id: number
   project_id: number
   script_id: number
   validation: Record<string, unknown>
@@ -342,6 +407,7 @@ export interface ProducerCreateResponse {
 
 export interface SceneRefineResponse {
   agent: string
+  run_id: number
   action: string
   scene_id: number
   feedback: string

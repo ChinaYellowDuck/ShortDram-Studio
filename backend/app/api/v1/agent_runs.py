@@ -1,9 +1,9 @@
 """Agent run records query endpoints."""
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from app.api.deps import AgentServiceDep
 from app.schemas.agent import AgentRunDetailResponse, AgentRunResponse, AgentRunStepResponse
-from app.schemas.common import PaginatedResponse, PaginationParams
+from app.schemas.common import PaginatedResponse
 
 router = APIRouter()
 
@@ -15,7 +15,8 @@ router = APIRouter()
 )
 def list_runs(
     service: AgentServiceDep,
-    params: PaginationParams,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     agent_id: int | None = None,
     project_id: int | None = None,
     status: str | None = None,
@@ -27,8 +28,8 @@ def list_runs(
     - **status**: 按状态筛选 (pending/running/completed/failed/cancelled)
     """
     runs, total = service.list_runs(
-        skip=(params.page - 1) * params.page_size,
-        limit=params.page_size,
+        skip=(page - 1) * page_size,
+        limit=page_size,
         agent_id=agent_id,
         project_id=project_id,
         status=status,
@@ -36,9 +37,9 @@ def list_runs(
     return PaginatedResponse(
         items=runs,
         total=total,
-        page=params.page,
-        page_size=params.page_size,
-        total_pages=(total + params.page_size - 1) // params.page_size,
+        page=page,
+        page_size=page_size,
+        total_pages=(total + page_size - 1) // page_size,
     )
 
 

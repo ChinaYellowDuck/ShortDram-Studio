@@ -20,10 +20,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add agents, agent_runs, agent_run_steps tables + llm_configs.model_type."""
-    # Clean up any leftover enum types from previous failed runs (PostgreSQL)
-    op.execute("DROP TYPE IF EXISTS runstatus CASCADE")
-    op.execute("DROP TYPE IF EXISTS stepstatus CASCADE")
-
     # Add model_type column to llm_configs
     op.add_column(
         "llm_configs",
@@ -183,8 +179,6 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_agent_run_steps_status"), "agent_run_steps", ["status"], unique=False
     )
-
-
 def downgrade() -> None:
     """Drop agent tables, enums, and llm_configs.model_type."""
     op.drop_index(op.f("ix_agent_run_steps_status"), table_name="agent_run_steps")

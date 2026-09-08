@@ -4,6 +4,7 @@ import type { LLMConfig, LLMConfigCreate, LLMProvider, LLMTestResult, Paginated 
 export async function listConfigs(params?: {
   page?: number
   page_size?: number
+  model_type?: 'text' | 'image' | 'video' | 'audio'
 }): Promise<Paginated<LLMConfig>> {
   const { data } = await api.get<Paginated<LLMConfig>>('/llm-configs', { params })
   return data
