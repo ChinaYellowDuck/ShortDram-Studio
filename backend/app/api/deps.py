@@ -5,6 +5,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.agent_service import AgentService
 from app.services.llm_config_service import LLMConfigService
 from app.services.project_service import ProjectService
 from app.services.script_service import ScriptService
@@ -48,6 +49,19 @@ def get_script_service(db: DBSession) -> ScriptService:
     return ScriptService(db)
 
 
+def get_agent_service(db: DBSession) -> AgentService:
+    """Dependency for AgentService.
+
+    Args:
+        db: Database session.
+
+    Returns:
+        AgentService instance.
+    """
+    return AgentService(db)
+
+
 LLMConfigServiceDep = Annotated[LLMConfigService, Depends(get_llm_config_service)]
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
 ScriptServiceDep = Annotated[ScriptService, Depends(get_script_service)]
+AgentServiceDep = Annotated[AgentService, Depends(get_agent_service)]

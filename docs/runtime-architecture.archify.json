@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ShortDram Studio 运行时架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "用户浏览器",
+      "sublabel": "Vue 3 SPA",
+      "tag": "Vite + Element Plus",
+      "pos": [40, 260],
+      "size": [130, 70]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "FastAPI 应用",
+      "sublabel": ":8000 /api/v1",
+      "pos": [260, 260],
+      "size": [140, 70]
+    },
+    {
+      "id": "services",
+      "type": "backend",
+      "label": "Service 层",
+      "sublabel": "CRUD 业务逻辑",
+      "pos": [480, 120],
+      "size": [140, 70]
+    },
+    {
+      "id": "agents",
+      "type": "backend",
+      "label": "智能体层",
+      "sublabel": "LangGraph 多智能体",
+      "pos": [480, 380],
+      "size": [140, 70]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": ":5432（开发 SQLite）",
+      "pos": [720, 120],
+      "size": [150, 70]
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Redis",
+      "sublabel": ":6379",
+      "pos": [260, 460],
+      "size": [130, 70]
+    },
+    {
+      "id": "llm",
+      "type": "external",
+      "label": "LLM 提供商",
+      "sublabel": "OpenAI / Anthropic / DeepSeek",
+      "pos": [960, 380],
+      "size": [170, 70]
+    },
+    {
+      "id": "langsmith",
+      "type": "external",
+      "label": "LangSmith",
+      "sublabel": "智能体追踪与评估",
+      "pos": [960, 540],
+      "size": [150, 70]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "前端",
+      "wraps": ["browser"]
+    },
+    {
+      "kind": "region",
+      "label": "后端应用 (FastAPI)",
+      "wraps": ["api", "services", "agents"]
+    },
+    {
+      "kind": "region",
+      "label": "外部服务",
+      "wraps": ["llm", "langsmith"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser-to-api",
+      "from": "browser",
+      "to": "api",
+      "label": "HTTP /api/v1",
+      "variant": "emphasis"
+    },
+    {
+      "id": "api-to-services",
+      "from": "api",
+      "to": "services",
+      "label": "业务逻辑"
+    },
+    {
+      "id": "services-to-db",
+      "from": "services",
+      "to": "db",
+      "label": "SQL (SQLAlchemy)"
+    },
+    {
+      "id": "api-to-agents",
+      "from": "api",
+      "to": "agents",
+      "label": "编排智能体"
+    },
+    {
+      "id": "agents-to-llm",
+      "from": "agents",
+      "to": "llm",
+      "label": "LLM 调用 (LangChain)"
+    },
+    {
+      "id": "api-to-redis",
+      "from": "api",
+      "to": "redis",
+      "label": "健康检查 / 缓存",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "agents-to-langsmith",
+      "from": "agents",
+      "to": "langsmith",
+      "label": "追踪上报",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "前端",
+      "items": ["Vue 3 SPA 通过 Axios 调用后端 /api/v1"]
+    },
+    {
+      "dot": "emerald",
+      "title": "后端",
+      "items": ["FastAPI 路由分发到 Service 与智能体层", "LangGraph 编排编剧、制片人智能体"]
+    },
+    {
+      "dot": "violet",
+      "title": "数据与外部",
+      "items": ["PostgreSQL 持久化剧本与项目", "Redis 健康检查与缓存", "LLM 提供商 + LangSmith 追踪"]
+    }
+  ]
+}

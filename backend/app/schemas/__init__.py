@@ -1,4 +1,16 @@
 """Pydantic schemas for request/response validation."""
+from app.schemas.agent import (
+    AgentCreate,
+    AgentResponse,
+    AgentRunCreate,
+    AgentRunDetailResponse,
+    AgentRunResponse,
+    AgentRunStepCreate,
+    AgentRunStepResponse,
+    AgentRunStepUpdate,
+    AgentRunUpdate,
+    AgentUpdate,
+)
 from app.schemas.common import PaginatedResponse, PaginationParams
 from app.schemas.llm_config import (
     LLMConfigCreate,
@@ -35,6 +47,16 @@ from app.schemas.script import (
 __all__ = [
     "PaginatedResponse",
     "PaginationParams",
+    "AgentCreate",
+    "AgentResponse",
+    "AgentUpdate",
+    "AgentRunCreate",
+    "AgentRunResponse",
+    "AgentRunDetailResponse",
+    "AgentRunUpdate",
+    "AgentRunStepCreate",
+    "AgentRunStepResponse",
+    "AgentRunStepUpdate",
     "LLMConfigCreate",
     "LLMConfigResponse",
     "LLMConfigUpdate",

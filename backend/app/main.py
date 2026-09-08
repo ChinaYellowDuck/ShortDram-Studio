@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.config import settings
+from app.database import SessionLocal
+from app.seed import seed_agents
 from app.utils.logger import setup_logger
 
 
@@ -22,6 +24,16 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.APP_ENV}")
     if settings.LANGCHAIN_TRACING_V2:
         logger.info("LangSmith tracing is enabled")
+
+    # Seed default agent metadata (idempotent)
+    try:
+        db = SessionLocal()
+        seeded = seed_agents(db)
+        if seeded > 0:
+            logger.info(f"Seeded {seeded} default agent(s)")
+        db.close()
+    except Exception as e:
+        logger.warning(f"Agent seeding skipped: {e}")
 
     yield
 
