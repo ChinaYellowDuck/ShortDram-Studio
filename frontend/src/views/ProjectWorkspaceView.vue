@@ -2,6 +2,7 @@
 import {
   ArrowDown,
   ArrowUp,
+  Check,
   Delete,
   Edit,
   Film,
@@ -9,6 +10,7 @@ import {
   PictureFilled,
   Plus,
   Search,
+  Setting,
   Sort,
   VideoCamera,
 } from '@element-plus/icons-vue'
@@ -30,7 +32,7 @@ import {
   listAssets,
   updateAsset,
 } from '../api/assets'
-import { transitionProjectPhase } from '../api/projects'
+import { transitionProjectPhase, getProject } from '../api/projects'
 import {
   createStoryboardShot,
   deleteStoryboardShot,
@@ -54,16 +56,17 @@ const projectId = computed(() => Number(route.params.projectId))
 
 // ── 阶段配置 ───────────────────────────────────────────────
 const phaseSteps: { key: ProjectPhase; label: string; icon: any; desc: string }[] = [
+  { key: 'setup', label: '智能体配置', icon: Setting, desc: '配置总控与创作智能体' },
   { key: 'script', label: '剧本创作', icon: MagicStick, desc: '导入小说、生成大纲与剧本' },
   { key: 'asset', label: '资产管理', icon: PictureFilled, desc: '人物/场景/道具统一资产库' },
   { key: 'storyboard', label: '分镜制作', icon: Film, desc: '场景级分镜设计' },
   { key: 'video', label: '视频合成', icon: VideoCamera, desc: '片段生成、配音、合成' },
-  { key: 'completed', label: '项目完成', icon: VideoCamera, desc: '成片交付' },
+  { key: 'completed', label: '项目完成', icon: Check, desc: '成片交付' },
 ]
 
 // ── 状态 ───────────────────────────────────────────────────
-const activeModule = ref<'script' | 'asset' | 'storyboard' | 'video' | 'agents'>('script')
-const projectPhase = ref<ProjectPhase>('script')
+const activeModule = ref<'script' | 'asset' | 'storyboard' | 'video' | 'agents'>('agents')
+const projectPhase = ref<ProjectPhase>('setup')
 const projectName = ref('')
 const transitioning = ref(false)
 
@@ -344,9 +347,31 @@ async function moveShot(index: number, direction: -1 | 1) {
 
 // ── 生命周期 ───────────────────────────────────────────────
 onMounted(async () => {
-  // 从 URL 读取默认 tab
+  // 加载项目信息
+  try {
+    const project = await getProject(projectId.value)
+    projectName.value = project.name
+    projectPhase.value = project.phase
+
+    // 根据阶段自动选 Tab
+    if (project.phase === 'setup') {
+      activeModule.value = 'agents'
+    } else if (project.phase === 'script') {
+      activeModule.value = 'script'
+    } else if (project.phase === 'asset') {
+      activeModule.value = 'asset'
+    } else if (project.phase === 'storyboard') {
+      activeModule.value = 'storyboard'
+    } else if (project.phase === 'video') {
+      activeModule.value = 'video'
+    }
+  } catch {
+    // ignore
+  }
+
+  // 从 URL 读取默认 tab（优先级更高）
   const tab = route.query.tab as string | undefined
-  if (tab && ['script', 'asset', 'storyboard', 'video'].includes(tab)) {
+  if (tab && ['script', 'asset', 'storyboard', 'video', 'agents'].includes(tab)) {
     activeModule.value = tab as typeof activeModule.value
   }
 
@@ -685,7 +710,7 @@ function handleTabChange(tabName: string) {
 }
 
 .modules-card {
-  min-height: 500px;
+  min-height: 450px;
 }
 
 .modules-tabs {

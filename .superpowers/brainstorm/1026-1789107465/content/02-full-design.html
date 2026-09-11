@@ -1,0 +1,166 @@
+<h2>完整设计方案：项目管理四大模块</h2>
+<p class="subtitle">数据模型、核心流程、关键接口总览</p>
+
+<div class="section">
+  <h3>📊 数据模型关系图</h3>
+  <p class="subtitle">核心实体及它们之间的关系</p>
+
+  <div style="background: var(--bg-tertiary); border-radius: 12px; padding: 24px; margin-top: 16px; font-family: monospace; font-size: 13px; line-height: 1.8;">
+<pre style="margin: 0; color: var(--text-primary); white-space: pre-wrap;">
+┌─────────────┐
+│   Project   │  项目（顶层容器）
+│  (项目)      │  name / status / phase
+└──────┬──────┘
+       │ 1:N
+       │
+┌──────▼──────┐      ┌────────────────┐      ┌─────────────────┐
+│   Script    │─────▶│ ScriptScene    │─────▶│ ScriptDialogue  │
+│  (剧本)      │ 1:N  │  (剧本场景)     │ 1:N  │  (台词)         │
+│ title/genre │      │ location/time  │      │ character/emotion│
+└──────┬──────┘      └────────────────┘      └─────────────────┘
+       │ 1:1
+       │
+┌──────▼──────┐      ┌────────────────┐
+│   Asset     │      │  AssetItem     │
+│  (资产库)    │──┬──▶│  (资产条目)    │
+│             │  │   │ type: char/scene/prop
+└─────────────┘  │   │ name / desc / image_url
+                 │   │ reference_count
+                 │   └────────────────┘
+                 │
+          ┌──────▼──────┐
+          │ Storyboard  │  分镜（场景级）
+          │  (分镜)      │  每个 ScriptScene 对应一个 StoryboardShot
+          │ shot_number │
+          │ composition │  景别/运镜/角度
+          │ visual_desc │  画面描述
+          │ duration    │  预估时长
+          │ key_frame   │  关键帧图
+          └──────┬──────┘
+                 │ 1:N
+                 │
+          ┌──────▼──────┐
+          │ VideoClip   │  视频片段
+          │  (视频片段)  │  每个分镜对应一个视频片段
+          │ status      │  pending/generating/done/failed
+          │ video_url   │
+          │ duration    │
+          └──────┬──────┘
+                 │
+          ┌──────▼──────┐
+          │ FinalVideo  │  最终成片
+          │  (最终视频)  │
+          │ version     │
+          │ video_url   │
+          │ subtitle_url│
+          │ bgm_url     │
+          └─────────────┘
+</pre>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 32px;">
+  <h3>🔄 核心工作流</h3>
+  <p class="subtitle">五阶段线性推进，每阶段有确认/回退机制</p>
+
+  <div style="display: flex; gap: 8px; margin-top: 16px; overflow-x: auto;">
+    <div style="flex: 1; min-width: 140px; background: rgba(99, 102, 241, 0.15); border: 1px solid #6366f1; border-radius: 8px; padding: 16px; text-align: center;">
+      <div style="font-size: 24px;">📝</div>
+      <h4 style="margin: 8px 0 4px;">剧本阶段</h4>
+      <p style="font-size: 12px; color: var(--text-secondary);">小说导入<br>大纲确认<br>剧本生成</p>
+      <div style="margin-top: 8px; font-size: 11px; color: #818cf8;">ScriptPhase</div>
+    </div>
+    <div style="display: flex; align-items: center; color: var(--text-tertiary);">→</div>
+    <div style="flex: 1; min-width: 140px; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 8px; padding: 16px; text-align: center;">
+      <div style="font-size: 24px;">🎨</div>
+      <h4 style="margin: 8px 0 4px;">资产阶段</h4>
+      <p style="font-size: 12px; color: var(--text-secondary);">AI 提取资产<br>生成形象图<br>人工确认</p>
+      <div style="margin-top: 8px; font-size: 11px; color: #34d399;">AssetPhase</div>
+    </div>
+    <div style="display: flex; align-items: center; color: var(--text-tertiary);">→</div>
+    <div style="flex: 1; min-width: 140px; background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; border-radius: 8px; padding: 16px; text-align: center;">
+      <div style="font-size: 24px;">🎬</div>
+      <h4 style="margin: 8px 0 4px;">分镜阶段</h4>
+      <p style="font-size: 12px; color: var(--text-secondary);">自动分镜<br>关键帧生成<br>镜头调整</p>
+      <div style="margin-top: 8px; font-size: 11px; color: #fbbf24;">StoryboardPhase</div>
+    </div>
+    <div style="display: flex; align-items: center; color: var(--text-tertiary);">→</div>
+    <div style="flex: 1; min-width: 140px; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: 8px; padding: 16px; text-align: center;">
+      <div style="font-size: 24px;">🎥</div>
+      <h4 style="margin: 8px 0 4px;">视频阶段</h4>
+      <p style="font-size: 12px; color: var(--text-secondary);">片段生成<br>配音合成<br>最终合成</p>
+      <div style="margin-top: 8px; font-size: 11px; color: #f87171;">VideoPhase</div>
+    </div>
+    <div style="display: flex; align-items: center; color: var(--text-tertiary);">→</div>
+    <div style="flex: 1; min-width: 140px; background: rgba(139, 92, 246, 0.15); border: 1px solid #8b5cf6; border-radius: 8px; padding: 16px; text-align: center;">
+      <div style="font-size: 24px;">✅</div>
+      <h4 style="margin: 8px 0 4px;">完成</h4>
+      <p style="font-size: 12px; color: var(--text-secondary);">成片导出<br>版本管理</p>
+      <div style="margin-top: 8px; font-size: 11px; color: #a78bfa;">Completed</div>
+    </div>
+  </div>
+
+  <p class="subtitle" style="margin-top: 12px; font-size: 13px;">
+    每阶段有「确认进入下一阶段」按钮，确认后锁定当前阶段内容（可解锁回退）
+  </p>
+</div>
+
+<div class="section" style="margin-top: 32px;">
+  <h3>🗂️ 各模块核心功能清单</h3>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+    <div class="option" style="cursor: default;">
+      <div class="content">
+        <h4>📝 剧本管理</h4>
+        <ul style="margin-top: 8px; padding-left: 20px; color: var(--text-secondary); font-size: 13px;">
+          <li>小说文本上传（.txt/.docx）</li>
+          <li>AI 生成故事大纲（可修改重生成）</li>
+          <li>AI 生成人物小传（可增删改）</li>
+          <li>AI 逐集生成剧本（分步确认）</li>
+          <li>剧本编辑器（场景/台词可视化编辑）</li>
+          <li>剧本版本历史</li>
+        </ul>
+      </div>
+    </div>
+    <div class="option" style="cursor: default;">
+      <div class="content">
+        <h4>🎨 资产管理</h4>
+        <ul style="margin-top: 8px; padding-left: 20px; color: var(--text-secondary); font-size: 13px;">
+          <li>AI 从剧本自动提取人物/场景/道具</li>
+          <li>人物资产：形象描述 + AI 形象图 + 音色</li>
+          <li>场景资产：场景描述 + AI 概念图</li>
+          <li>道具资产：道具描述 + 参考图</li>
+          <li>资产增删改、合并去重</li>
+          <li>资产引用关系可视化</li>
+        </ul>
+      </div>
+    </div>
+    <div class="option" style="cursor: default;">
+      <div class="content">
+        <h4>🎬 分镜管理</h4>
+        <ul style="margin-top: 8px; padding-left: 20px; color: var(--text-secondary); font-size: 13px;">
+          <li>AI 自动生成场景级分镜</li>
+          <li>每个分镜：景别/运镜/画面描述/时长</li>
+          <li>AI 生成分镜关键帧预览图</li>
+          <li>分镜列表拖拽排序</li>
+          <li>分镜编辑器（修改镜头参数）</li>
+          <li>分镜版本对比</li>
+        </ul>
+      </div>
+    </div>
+    <div class="option" style="cursor: default;">
+      <div class="content">
+        <h4>🎥 视频合成</h4>
+        <ul style="margin-top: 8px; padding-left: 20px; color: var(--text-secondary); font-size: 13px;">
+          <li>逐分镜生成视频片段（可重生成）</li>
+          <li>片段预览 + 状态追踪（队列/生成中/失败）</li>
+          <li>AI 配音合成（按角色音色）</li>
+          <li>字幕自动生成 + 样式调整</li>
+          <li>BGM 推荐与选择</li>
+          <li>最终合成（转场 + 音视频同步）</li>
+          <li>多版本成片管理</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>

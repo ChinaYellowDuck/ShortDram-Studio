@@ -170,6 +170,7 @@ class ProjectService:
         project = self.get_by_id_or_404(project_id)
 
         valid_phases = [
+            ProjectPhase.SETUP,
             ProjectPhase.SCRIPT,
             ProjectPhase.ASSET,
             ProjectPhase.STORYBOARD,
@@ -182,6 +183,13 @@ class ProjectService:
                 detail=f"Invalid phase: {target_phase}",
             )
 
+        # Validate: advancing from setup to script requires agent configuration
+        if (
+            project.phase == ProjectPhase.SETUP
+            and target_phase == ProjectPhase.SCRIPT
+        ):
+            self._validate_agent_configuration(project_id)
+
         project.phase = target_phase
 
         if target_phase == ProjectPhase.COMPLETED:
@@ -189,9 +197,51 @@ class ProjectService:
         elif project.status == ProjectStatus.COMPLETED:
             # Rolling back from completed, set back to in_progress
             project.status = ProjectStatus.IN_PROGRESS
-        elif project.status == ProjectStatus.DRAFT and target_phase != ProjectPhase.SCRIPT:
+        elif project.status == ProjectStatus.DRAFT and target_phase not in (
+            ProjectPhase.SETUP,
+            ProjectPhase.SCRIPT,
+        ):
             project.status = ProjectStatus.IN_PROGRESS
 
         self.db.commit()
         self.db.refresh(project)
         return project
+
+    def _validate_agent_configuration(self, project_id: int) -> None:
+        """Validate that the project has proper agent configuration.
+
+        Requires:
+        - A director (总控) agent is set
+        - At least one creative agent is enabled (script/asset/storyboard related)
+        """
+        from app.models.project_agent import ProjectAgentConfig
+
+        configs = (
+            self.db.query(ProjectAgentConfig)
+            .filter(
+                ProjectAgentConfig.project_id == project_id,
+                ProjectAgentConfig.is_enabled == True,  # noqa: E712
+            )
+            .all()
+        )
+
+        if not configs:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请先配置并启用至少一个智能体",
+            )
+
+        has_director = any(c.is_director for c in configs)
+        if not has_director:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请设置总控智能体",
+            )
+
+        # At least one non-director creative agent should be enabled
+        creative_count = sum(1 for c in configs if not c.is_director)
+        if creative_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请至少启用一个创作类智能体",
+            )

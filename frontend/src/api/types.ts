@@ -9,7 +9,7 @@ export interface Paginated<T> {
 }
 
 export type ProjectStatus = 'draft' | 'in_progress' | 'completed' | 'archived'
-export type ProjectPhase = 'script' | 'asset' | 'storyboard' | 'video' | 'completed'
+export type ProjectPhase = 'setup' | 'script' | 'asset' | 'storyboard' | 'video' | 'completed'
 
 export interface Project {
   id: number

@@ -1,0 +1,106 @@
+<h2>项目管理四大模块架构</h2>
+<p class="subtitle">一个短剧项目从创意到成片的完整流水线</p>
+
+<div style="display: flex; flex-direction: column; gap: 24px; margin-top: 32px;">
+
+  <!-- Module 1: Script -->
+  <div class="option" data-choice="script" onclick="toggleSelect(this)" style="cursor: default; border-left: 4px solid #6366f1;">
+    <div class="letter" style="background: #6366f1;">1</div>
+    <div class="content">
+      <h3 style="color: #818cf8;">📝 剧本管理</h3>
+      <p>剧本是项目的起点和核心。支持两种创建方式：</p>
+      <ul style="margin-top: 8px; padding-left: 20px; color: var(--text-secondary);">
+        <li><strong>小说导入生成</strong> — 上传小说文本，AI 自动提炼并改编为短剧剧本格式</li>
+        <li><strong>从零创建</strong> — 一句话创意 / 题材选择，AI 生成完整剧本</li>
+      </ul>
+      <p style="margin-top: 8px; color: var(--text-secondary);">
+        包含：剧集结构、场景列表、角色人设、台词对白、动作描述
+      </p>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="display: flex; justify-content: center; color: var(--text-tertiary);">
+    <span style="font-size: 24px;">↓</span>
+    <span style="margin-left: 8px; align-self: center;">AI 智能提取</span>
+  </div>
+
+  <!-- Module 2: Assets -->
+  <div class="option" data-choice="assets" onclick="toggleSelect(this)" style="cursor: default; border-left: 4px solid #10b981;">
+    <div class="letter" style="background: #10b981;">2</div>
+    <div class="content">
+      <h3 style="color: #34d399;">🎨 资产管理</h3>
+      <p>从剧本中自动提取并管理所有视觉资产，是分镜和视频生成的基础：</p>
+      <div style="display: flex; gap: 16px; margin-top: 12px;">
+        <div style="flex: 1; background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 8px;">
+          <strong>👤 人物资产</strong>
+          <p style="font-size: 13px; margin-top: 4px; color: var(--text-secondary);">角色设定、形象图、服装、表情、音色</p>
+        </div>
+        <div style="flex: 1; background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 8px;">
+          <strong>🏞️ 场景资产</strong>
+          <p style="font-size: 13px; margin-top: 4px; color: var(--text-secondary);">场景描述、概念图、环境氛围、时间</p>
+        </div>
+        <div style="flex: 1; background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 8px;">
+          <strong>📦 道具资产</strong>
+          <p style="font-size: 13px; margin-top: 4px; color: var(--text-secondary);">关键道具、特效道具、参考图</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="display: flex; justify-content: center; color: var(--text-tertiary);">
+    <span style="font-size: 24px;">↓</span>
+    <span style="margin-left: 8px; align-self: center;">分镜拆解</span>
+  </div>
+
+  <!-- Module 3: Storyboard -->
+  <div class="option" data-choice="storyboard" onclick="toggleSelect(this)" style="cursor: default; border-left: 4px solid #f59e0b;">
+    <div class="letter" style="background: #f59e0b;">3</div>
+    <div class="content">
+      <h3 style="color: #fbbf24;">🎬 分镜管理</h3>
+      <p>将剧本的每个场景拆解为可拍摄的分镜镜头，是视频生成的直接依据：</p>
+      <ul style="margin-top: 8px; padding-left: 20px; color: var(--text-secondary);">
+        <li><strong>镜头设计</strong> — 景别（远/全/中/近/特）、运镜方式、角度</li>
+        <li><strong>画面描述</strong> — 每帧画面的详细文字描述，用于 AI 视频生成</li>
+        <li><strong>角色动作</strong> — 出场人物、动作、表情、站位</li>
+        <li><strong>时间预估</strong> — 每个镜头的时长、对白匹配</li>
+        <li><strong>分镜图</strong> — 关键帧预览图（文生图生成）</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="display: flex; justify-content: center; color: var(--text-tertiary);">
+    <span style="font-size: 24px;">↓</span>
+    <span style="margin-left: 8px; align-self: center;">生成 &amp; 合成</span>
+  </div>
+
+  <!-- Module 4: Video -->
+  <div class="option" data-choice="video" onclick="toggleSelect(this)" style="cursor: default; border-left: 4px solid #ef4444;">
+    <div class="letter" style="background: #ef4444;">4</div>
+    <div class="content">
+      <h3 style="color: #f87171;">🎥 视频合成</h3>
+      <p>基于分镜生成视频片段，并最终合成为完整短剧：</p>
+      <div style="display: flex; gap: 16px; margin-top: 12px;">
+        <div style="flex: 1; background: rgba(239, 68, 68, 0.1); padding: 12px; border-radius: 8px;">
+          <strong>🎞️ 片段生成</strong>
+          <p style="font-size: 13px; margin-top: 4px; color: var(--text-secondary);">逐镜头 AI 视频生成 / 图生视频</p>
+        </div>
+        <div style="flex: 1; background: rgba(239, 68, 68, 0.1); padding: 12px; border-radius: 8px;">
+          <strong>🔊 音频合成</strong>
+          <p style="font-size: 13px; margin-top: 4px; color: var(--text-secondary);">配音、BGM、音效、字幕</p>
+        </div>
+        <div style="flex: 1; background: rgba(239, 68, 68, 0.1); padding: 12px; border-radius: 8px;">
+          <strong>✨ 最终合成</strong>
+          <p style="font-size: 13px; margin-top: 4px; color: var(--text-secondary);">转场、剪辑、输出成片</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="text-align: center; margin-top: 32px;">
+  每个模块都是前一个的输出、后一个的输入，形成完整的短剧制作流水线
+</p>

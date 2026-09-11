@@ -23,6 +23,11 @@ export async function createProject(payload: ProjectCreate): Promise<Project> {
   return data
 }
 
+export async function getProject(id: number): Promise<Project> {
+  const { data } = await api.get<Project>(`/projects/${id}`)
+  return data
+}
+
 export async function deleteProject(id: number): Promise<void> {
   await api.delete(`/projects/${id}`)
 }

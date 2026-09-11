@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, MagicStick, Notebook, Setting, Upload, UploadFilled, User, VideoPlay } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, MagicStick, Notebook, Upload, UploadFilled, User, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { errorMessage } from '../api/client'
-import { listAvailableAgents, listProjectAgents, setupProjectAgents } from '../api/projectAgents'
 import {
   createScript,
   generateCharacters,
@@ -20,11 +19,10 @@ import {
   updateScript,
 } from '../api/scripts'
 import type {
-  AgentSimple,
-  ProjectAgentConfig,
   ScriptDetail,
   ScriptCharacter,
   ScriptEpisode,
+  ScriptGenerationStage,
 } from '../api/types'
 
 const route = useRoute()
@@ -33,108 +31,17 @@ const projectId = computed(() => Number(route.params.projectId))
 
 // ── 步骤配置 ──────────────────────────────────────────────
 const steps = [
-  { key: 'agents', label: '智能体配置', icon: Setting, desc: '选择总控与创作智能体' },
   { key: 'idea', label: '创意输入', icon: Notebook, desc: '描述你的短剧创意' },
   { key: 'outline', label: '故事大纲', icon: MagicStick, desc: '生成故事大纲与分集' },
   { key: 'characters', label: '人物设定', icon: User, desc: '设计主要人物档案' },
   { key: 'episodes', label: '逐集剧本', icon: VideoPlay, desc: '生成每集详细剧本' },
 ] as const
 
-type WizardStep = typeof steps[number]['key']
-const activeStep = ref<WizardStep>('agents')
+const activeStep = ref<ScriptGenerationStage>('idea')
 const script = ref<ScriptDetail | null>(null)
 const scriptId = ref<number | null>(null)
 const loading = ref(false)
 const generating = ref(false)
-
-// ── Step 0: 智能体配置 ────────────────────────────────────
-const availableAgents = ref<AgentSimple[]>([])
-const projectAgents = ref<ProjectAgentConfig[]>([])
-const agentsLoading = ref(false)
-const directorAgentId = ref<number | null>(null)
-const enabledAgentIds = ref<number[]>([])
-const savingAgents = ref(false)
-
-async function loadAgentConfig() {
-  agentsLoading.value = true
-  try {
-    const [all, proj] = await Promise.all([
-      listAvailableAgents(),
-      listProjectAgents(projectId.value),
-    ])
-    availableAgents.value = all
-    projectAgents.value = proj
-    const enabled = proj.filter((a) => a.is_enabled)
-    enabledAgentIds.value = enabled.map((a) => a.agent_id)
-    const dir = proj.find((a) => a.is_director)
-    directorAgentId.value = dir?.agent_id || null
-  } catch (err) {
-    ElMessage.error(errorMessage(err))
-  } finally {
-    agentsLoading.value = false
-  }
-}
-
-function toggleAgent(id: number) {
-  const idx = enabledAgentIds.value.indexOf(id)
-  if (idx >= 0) {
-    enabledAgentIds.value.splice(idx, 1)
-  } else {
-    enabledAgentIds.value.push(id)
-  }
-}
-
-function isAgentEnabled(id: number) {
-  return enabledAgentIds.value.includes(id)
-}
-
-function setDirector(id: number) {
-  directorAgentId.value = id
-  // 总控自动启用
-  if (!isAgentEnabled(id)) {
-    enabledAgentIds.value.push(id)
-  }
-}
-
-const canProceedToIdea = computed(() => {
-  // 必须有总控智能体 + 至少启用 1 个创作/文字类智能体
-  if (!directorAgentId.value) return false
-  const creativeAgents = availableAgents.value.filter(
-    (a) => a.category === '文字' || a.category === '创作' || a.category === '视觉',
-  )
-  const hasCreative = creativeAgents.some((a) => isAgentEnabled(a.id))
-  return hasCreative
-})
-
-async function saveAgentConfigAndContinue() {
-  if (!directorAgentId.value) {
-    ElMessage.warning('请选择一个总控智能体')
-    return
-  }
-  if (!canProceedToIdea.value) {
-    ElMessage.warning('请至少启用一个创作类智能体')
-    return
-  }
-  savingAgents.value = true
-  try {
-    await setupProjectAgents(projectId.value, {
-      director_agent_id: directorAgentId.value,
-      enabled_agent_ids: enabledAgentIds.value,
-    })
-    ElMessage.success('智能体配置已保存')
-    activeStep.value = 'idea'
-  } catch (err) {
-    ElMessage.error(errorMessage(err))
-  } finally {
-    savingAgents.value = false
-  }
-}
-
-// 核心创作智能体（快速配置区域展示的）
-const coreAgentKeys = ['director', 'screenwriter', 'storyboard', 'character_designer', 'copywriter']
-const coreAgents = computed(() =>
-  availableAgents.value.filter((a) => coreAgentKeys.includes(a.agent_key)),
-)
 
 // ── Step 1: 创意输入 ───────────────────────────────────────────────
 const ideaForm = ref({
@@ -169,12 +76,9 @@ async function loadScript() {
       scriptId.value = res.items[0].id
       const detail = await getScript(scriptId.value)
       script.value = detail
-      // 已进入创作阶段的，跳过智能体配置
-      if (detail.generation_stage !== 'idea') {
-        activeStep.value = detail.generation_stage === 'completed'
-          ? 'episodes'
-          : detail.generation_stage as WizardStep
-      }
+      activeStep.value = detail.generation_stage === 'completed'
+        ? 'episodes'
+        : detail.generation_stage
       ideaForm.value = {
         idea: detail.core_idea || '',
         genre: detail.genre || '都市',
@@ -349,10 +253,7 @@ function goPrev() {
   }
 }
 
-onMounted(() => {
-  loadAgentConfig()
-  loadScript()
-})
+onMounted(loadScript)
 </script>
 
 <template>
@@ -371,72 +272,6 @@ onMounted(() => {
           </template>
         </el-step>
       </el-steps>
-    </div>
-
-    <!-- Step 0: 智能体配置 -->
-    <div v-show="activeStep === 'agents'" class="wizard-content">
-      <div class="step-card">
-        <h3>配置智能体团队</h3>
-        <p class="step-tip">选择总控智能体和参与创作的子智能体，AI 将协同完成短剧制作</p>
-
-        <div class="agent-section" v-loading="agentsLoading">
-          <h4 class="section-title">总控智能体</h4>
-          <div class="agent-grid single">
-            <div
-              v-for="agent in availableAgents.filter(a => a.agent_key === 'director')"
-              :key="agent.id"
-              class="agent-select-card"
-              :class="{ selected: directorAgentId === agent.id }"
-              @click="setDirector(agent.id)"
-            >
-              <div class="agent-icon" :style="{ background: '#e6a23c' }">🎬</div>
-              <div class="agent-info">
-                <div class="agent-name">{{ agent.name }}</div>
-                <div class="agent-desc">{{ agent.description }}</div>
-              </div>
-              <el-radio :model-value="directorAgentId === agent.id" @click.stop="setDirector(agent.id)">
-                设为总控
-              </el-radio>
-            </div>
-          </div>
-
-          <h4 class="section-title">创作智能体</h4>
-          <div class="agent-grid">
-            <div
-              v-for="agent in coreAgents.filter(a => a.agent_key !== 'director')"
-              :key="agent.id"
-              class="agent-select-card"
-              :class="{ selected: isAgentEnabled(agent.id) }"
-              @click="toggleAgent(agent.id)"
-            >
-              <div class="agent-icon">
-                {{ agent.name?.[0] || '?' }}
-              </div>
-              <div class="agent-info">
-                <div class="agent-name">{{ agent.name }}</div>
-                <div class="agent-desc">{{ agent.description }}</div>
-              </div>
-              <el-checkbox :model-value="isAgentEnabled(agent.id)" @click.stop="toggleAgent(agent.id)" />
-            </div>
-          </div>
-        </div>
-
-        <div class="step-actions">
-          <el-button
-            type="primary"
-            :icon="Check"
-            :loading="savingAgents"
-            :disabled="!canProceedToIdea"
-            @click="saveAgentConfigAndContinue"
-          >
-            确认配置，开始创作
-          </el-button>
-        </div>
-        <div v-if="!canProceedToIdea && availableAgents.length" class="config-hint">
-          <el-icon><Setting /></el-icon>
-          请选择总控智能体并至少启用一个创作智能体
-        </div>
-      </div>
     </div>
 
     <!-- Step 1: 创意输入 -->
@@ -730,102 +565,6 @@ onMounted(() => {
   margin: 0 0 12px 0;
   font-size: 17px;
   font-weight: 600;
-}
-
-.step-tip {
-  margin: 0 0 20px 0;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-
-.config-hint {
-  text-align: center;
-  margin-top: 12px;
-  font-size: 13px;
-  color: var(--el-text-color-placeholder);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.agent-section {
-  margin-bottom: 16px;
-}
-
-.section-title {
-  margin: 20px 0 10px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-}
-
-.agent-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-}
-
-.agent-grid.single {
-  grid-template-columns: 1fr;
-}
-
-.agent-select-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: var(--el-bg-color);
-}
-
-.agent-select-card:hover {
-  border-color: var(--el-color-primary-light-5);
-  background: var(--el-color-primary-light-9);
-}
-
-.agent-select-card.selected {
-  border-color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-}
-
-.agent-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: var(--el-color-primary-light-8);
-  color: var(--el-color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.agent-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.agent-info .agent-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  margin-bottom: 2px;
-}
-
-.agent-info .agent-desc {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 .idea-form {
