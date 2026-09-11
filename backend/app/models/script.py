@@ -5,7 +5,7 @@ A script belongs to a project and contains multiple scenes, characters, and dial
 """
 import enum
 
-from sqlalchemy import Enum, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Enum, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
@@ -273,7 +273,7 @@ class ScriptEpisode(BaseModel):
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     synopsis: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    is_generated: Mapped[bool] = mapped_column(Integer, default=0, nullable=False)
+    is_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False, index=True)
 
     script: Mapped[Script] = relationship("Script", back_populates="episodes")

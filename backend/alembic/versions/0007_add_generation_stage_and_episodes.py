@@ -49,7 +49,7 @@ def upgrade() -> None:
         sa.Column("title", sa.String(length=200), nullable=True),
         sa.Column("synopsis", sa.Text(), nullable=True),
         sa.Column("duration_seconds", sa.Integer(), nullable=True),
-        sa.Column("is_generated", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("is_generated", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("order_index", sa.Integer(), nullable=False, server_default="0"),
         sa.PrimaryKeyConstraint("id"),
     )
