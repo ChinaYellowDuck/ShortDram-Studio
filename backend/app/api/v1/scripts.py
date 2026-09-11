@@ -368,15 +368,19 @@ def generate_characters(
 def generate_episode_script(
     script_id: int, episode_number: int, service: ScriptServiceDep
 ):
-    """Generate full script for a specific episode."""
-    # Placeholder: actual generation via agent layer
+    """Generate full script (scenes + dialogues) for a specific episode."""
+    # Find or create the episode
     episodes = service.list_episodes(script_id)
+    target = None
     for ep in episodes:
         if ep.episode_number == episode_number:
-            return service.mark_episode_generated(ep.id)
-    # If not found, create it
-    ep = service.create_episode(
-        script_id,
-        ScriptEpisodeCreate(episode_number=episode_number, is_generated=True),
-    )
-    return ep
+            target = ep
+            break
+
+    if not target:
+        target = service.create_episode(
+            script_id,
+            ScriptEpisodeCreate(episode_number=episode_number),
+        )
+
+    return service.generate_episode_script(target.id)

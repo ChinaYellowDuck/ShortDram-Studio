@@ -573,3 +573,99 @@ class ScriptService:
                 self.db.commit()
 
         return ep
+
+    def generate_episode_script(self, episode_id: int) -> ScriptEpisode:
+        """Generate full script (scenes + dialogues) for an episode.
+
+        Note: This creates demo/seed content based on episode info.
+        Real AI generation is handled by the agent layer.
+        """
+        ep = self.get_episode_or_404(episode_id)
+        script = self.get_by_id(ep.script_id)
+        if not script:
+            raise HTTPException(status_code=404, detail="Script not found")
+
+        # Get characters for the script
+        chars = self.list_characters(ep.script_id)
+        if not chars:
+            # Create default characters if none exist
+            self.create_character(
+                ep.script_id,
+                ScriptCharacterCreate(name="主角", character_type="主角", description="故事的主要角色"),
+            )
+            self.create_character(
+                ep.script_id,
+                ScriptCharacterCreate(name="配角", character_type="配角", description="辅助推动剧情的角色"),
+            )
+            chars = self.list_characters(ep.script_id)
+
+        # Generate 3-5 demo scenes for the episode
+        num_scenes = 4
+        locations = ["客厅", "办公室", "街道", "咖啡馆", "公园", "家中", "餐厅"]
+        int_ext_values = ["INT", "EXT", "INT/EXT"]
+        times = ["日", "夜", "晨", "昏"]
+
+        scene_templates = [
+            f"第{ep.episode_number}集开场 - {ep.title or '故事展开'}",
+            "冲突升级",
+            "关键转折",
+            "悬念收尾",
+        ]
+
+        dialogue_templates = [
+            ("你来了。", "我以为你不会来。"),
+            ("这件事，你怎么看？", "我觉得没那么简单。"),
+            ("真相到底是什么？", "也许我们永远不会知道。"),
+            ("别走。", "对不起，我必须走。"),
+        ]
+
+        for i in range(num_scenes):
+            scene = self.create_scene(
+                ep.script_id,
+                ScriptSceneCreate(
+                    scene_number=f"{ep.episode_number}.{i + 1}",
+                    location=locations[i % len(locations)],
+                    int_ext=int_ext_values[i % len(int_ext_values)],
+                    time_of_day=times[i % len(times)],
+                    description=f"第{ep.episode_number}集 第{i + 1}场 - {scene_templates[i % len(scene_templates)]}\n" +
+                                (ep.synopsis or "剧情发展中...")[:100],
+                    order_index=ep.episode_number * 1000 + i,
+                ),
+            )
+
+            # Add 2-3 dialogues per scene
+            for j in range(3):
+                char = chars[j % len(chars)]
+                dlg_template = dialogue_templates[(i + j) % len(dialogue_templates)]
+                text = dlg_template[0] if j % 2 == 0 else dlg_template[1]
+                self.create_dialogue(
+                    scene.id,
+                    ScriptDialogueCreate(
+                        character_name=char.name,
+                        character_id=char.id,
+                        dialogue=text + f"（第{i + 1}场第{j + 1}句）",
+                        action="走进来" if j == 0 else None,
+                        order_index=j,
+                    ),
+                )
+
+        ep.is_generated = True
+        # Update synopsis if empty
+        if not ep.synopsis:
+            ep.synopsis = f"第{ep.episode_number}集内容：故事继续发展，主角面临新的挑战。"
+
+        self.db.commit()
+        self.db.refresh(ep)
+
+        # Check if all episodes are generated
+        all_generated = all(
+            e.is_generated for e in self.list_episodes(ep.script_id)
+        )
+        if all_generated:
+            script.generation_stage = ScriptGenerationStage.COMPLETED
+            self.db.commit()
+        else:
+            script.generation_stage = ScriptGenerationStage.EPISODES
+            self.db.commit()
+
+        return ep

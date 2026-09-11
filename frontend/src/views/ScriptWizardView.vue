@@ -5,7 +5,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { errorMessage } from '../api/client'
-import { createScript, generateCharacters, generateOutline, getScript, listCharacters, listEpisodes, listScripts, updateScript } from '../api/scripts'
+import { createScript, generateCharacters, generateEpisodeScript, generateOutline, getScript, listCharacters, listEpisodes, listScripts, updateScript } from '../api/scripts'
 import type {
   ScriptDetail,
   ScriptCharacter,
@@ -162,8 +162,24 @@ function goToEpisodes() {
   activeStep.value = 'episodes'
 }
 
-function openEpisodeEditor(_episodeId: number) {
-  router.push(`/projects/${projectId.value}/script`)
+async function handleEpisodeClick(ep: (typeof episodes.value)[number]) {
+  if (ep.is_generated) {
+    router.push(`/projects/${projectId.value}/script`)
+    return
+  }
+  generating.value = true
+  try {
+    if (!scriptId.value) return
+    await generateEpisodeScript(scriptId.value, ep.episode_number)
+    const eps = await listEpisodes(scriptId.value)
+    episodes.value = eps
+    ElMessage.success(`第${ep.episode_number}集剧本生成成功！`)
+    router.push(`/projects/${projectId.value}/script`)
+  } catch (err) {
+    ElMessage.error(errorMessage(err))
+  } finally {
+    generating.value = false
+  }
 }
 
 // ── 步骤切换 ──────────────────────────────────────────────
@@ -361,7 +377,7 @@ onMounted(loadScript)
             :key="ep.id"
             class="episode-card"
             :class="{ generated: ep.is_generated }"
-            @click="openEpisodeEditor(ep.id)"
+            @click="handleEpisodeClick(ep)"
           >
             <div class="ep-number">{{ ep.episode_number }}</div>
             <div class="ep-title">{{ ep.title || `第${ep.episode_number}集` }}</div>
