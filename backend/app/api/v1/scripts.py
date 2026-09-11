@@ -2,7 +2,7 @@
 
 Handles scripts, scenes, characters, dialogues, and Fountain export.
 """
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, File, Query, UploadFile, status
 
 from app.api.deps import ScriptServiceDep
 from app.schemas.common import PaginatedResponse
@@ -384,3 +384,41 @@ def generate_episode_script(
         )
 
     return service.generate_episode_script(target.id)
+
+
+# ── Import Endpoints ──────────────────────────────────────────────────────
+
+
+@router.post(
+    "/{script_id}/import/text",
+    summary="从文本导入剧本/小说",
+)
+def import_script_text(
+    script_id: int,
+    service: ScriptServiceDep,
+    text: str = Query(..., description="剧本或小说文本"),
+    source_type: str = Query("auto", description="来源类型：auto/novel/fountain"),
+):
+    """Import script from plain text (novel or Fountain format)."""
+    return service.import_from_text(script_id, text, source_type)
+
+
+@router.post(
+    "/{script_id}/import/file",
+    summary="从文件导入剧本/小说",
+)
+async def import_script_file(
+    script_id: int,
+    service: ScriptServiceDep,
+    file: UploadFile = File(..., description="剧本文件（.txt/.fountain）"),
+    source_type: str = Query("auto", description="来源类型：auto/novel/fountain"),
+):
+    """Import script from uploaded file."""
+    # Read file content
+    content = await file.read()
+    try:
+        text = content.decode('utf-8')
+    except UnicodeDecodeError:
+        text = content.decode('gbk', errors='ignore')
+
+    return service.import_from_text(script_id, text, source_type)

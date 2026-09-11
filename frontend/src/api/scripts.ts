@@ -62,6 +62,34 @@ export async function deleteScript(scriptId: number): Promise<void> {
   await api.delete(`/scripts/${scriptId}`)
 }
 
+export async function importScriptText(
+  scriptId: number,
+  text: string,
+  sourceType: 'auto' | 'novel' | 'fountain' = 'auto',
+): Promise<{ format: string; scenes: number; dialogues: number; characters: number }> {
+  const { data } = await api.post(
+    `/scripts/${scriptId}/import/text`,
+    null,
+    { params: { text, source_type: sourceType } },
+  )
+  return data
+}
+
+export async function importScriptFile(
+  scriptId: number,
+  file: File,
+  sourceType: 'auto' | 'novel' | 'fountain' = 'auto',
+): Promise<{ format: string; scenes: number; dialogues: number; characters: number }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await api.post(
+    `/scripts/${scriptId}/import/file`,
+    formData,
+    { params: { source_type: sourceType } },
+  )
+  return data
+}
+
 export async function exportFountain(scriptId: number): Promise<FountainExport> {
   const { data } = await api.get<FountainExport>(`/scripts/${scriptId}/export/fountain`)
   return data

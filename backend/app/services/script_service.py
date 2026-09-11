@@ -28,6 +28,7 @@ from app.schemas.script import (
     ScriptSceneUpdate,
     ScriptUpdate,
 )
+import re
 
 
 class ScriptService:
@@ -414,6 +415,324 @@ class ScriptService:
             lines.append("")
 
         return "\n".join(lines)
+
+    # ── Script Import ──────────────────────────────────────────────────────
+
+    def import_from_text(self, script_id: int, text: str, source_type: str = "auto") -> dict:
+        """Import a script from plain text.
+
+        Supports two formats:
+        - 'fountain': Standard Fountain screenplay format
+        - 'novel': Novel/story text (auto-detect chapters as scenes)
+        - 'auto': Auto-detect format
+
+        Returns summary stats about what was imported.
+        """
+        script = self.get_by_id_or_404(script_id)
+        text = text.strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="导入内容不能为空")
+
+        # Detect format
+        if source_type == "auto":
+            source_type = self._detect_format(text)
+
+        stats = {"format": source_type, "scenes": 0, "dialogues": 0, "characters": 0}
+
+        if source_type == "fountain":
+            stats.update(self._parse_fountain(script_id, text))
+        else:
+            stats.update(self._parse_novel(script_id, text))
+
+        # Update generation stage
+        script.generation_stage = ScriptGenerationStage.COMPLETED
+        script.synopsis = text[:500] if not script.synopsis else script.synopsis
+        self.db.commit()
+
+        return stats
+
+    def _detect_format(self, text: str) -> str:
+        """Auto-detect if text is Fountain format or novel."""
+        lines = text.strip().split("\n")
+        fountain_signals = 0
+
+        # Check for Fountain markers
+        fountain_patterns = [
+            r"^INT[./\s]",
+            r"^EXT[./\s]",
+            r"^INT/EXT",
+            r"^\..+",  # Scene heading with dot prefix
+            r"^[A-Z ]+$",  # All-caps character name
+        ]
+
+        for line in lines[:100]:
+            line = line.strip()
+            for pat in fountain_patterns:
+                if re.match(pat, line):
+                    fountain_signals += 1
+                    break
+
+        return "fountain" if fountain_signals >= 3 else "novel"
+
+    def _parse_fountain(self, script_id: int, text: str) -> dict:
+        """Parse Fountain format text into scenes and dialogues."""
+        lines = text.split("\n")
+        scenes_created = 0
+        dialogues_created = 0
+        characters_seen: dict[str, int] = {}
+        current_scene_id: Optional[int] = None
+        current_char: Optional[str] = None
+        current_dialogue: list[str] = []
+        current_action: list[str] = []
+        scene_num = 0
+
+        def flush_dialogue():
+            nonlocal dialogues_created, current_char, current_dialogue, current_scene_id
+            if current_char and current_dialogue and current_scene_id:
+                char_id = characters_seen.get(current_char)
+                if not char_id:
+                    char = self.create_character(
+                        script_id,
+                        ScriptCharacterCreate(name=current_char, character_type="配角"),
+                    )
+                    characters_seen[current_char] = char.id
+                    char_id = char.id
+
+                self.create_dialogue(
+                    current_scene_id,
+                    ScriptDialogueCreate(
+                        character_name=current_char,
+                        character_id=char_id,
+                        dialogue="\n".join(current_dialogue).strip(),
+                        order_index=dialogues_created,
+                    ),
+                )
+                dialogues_created += 1
+            current_char = None
+            current_dialogue = []
+
+        def flush_action():
+            nonlocal current_action
+            # Action lines are stored as scene description enhancement
+            current_action = []
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Scene heading (INT./EXT. or . prefix)
+            if re.match(r"^(INT|EXT|INT/EXT)[\s./-]", stripped, re.IGNORECASE) or \
+               (stripped.startswith(".") and len(stripped) > 1 and stripped[1].isupper()):
+                flush_dialogue()
+                scene_num += 1
+                scenes_created += 1
+
+                # Parse location and time
+                heading = stripped.lstrip(".")
+                int_ext = "INT"
+                location = heading
+                time_of_day = "日"
+
+                # Extract INT/EXT prefix
+                ie_match = re.match(r"^(INT/EXT|INT|EXT)[\s.\-/]+(.+)$", heading, re.IGNORECASE)
+                if ie_match:
+                    ie_raw = ie_match.group(1).upper().replace(".", "")
+                    if ie_raw == "INT/EXT":
+                        int_ext = "INT_EXT"
+                    else:
+                        int_ext = ie_raw
+                    rest = ie_match.group(2).strip()
+
+                    # Try to extract time from the rest (after - or :)
+                    rest_match = re.match(r"(.+?)\s+[-—–]\s+(.+)$", rest)
+                    if rest_match:
+                        location = rest_match.group(1).strip()
+                        time_str = rest_match.group(2).strip()
+                    else:
+                        location = rest
+                        time_str = ""
+
+                    # Determine time of day
+                    time_str_lower = time_str.lower()
+                    if "夜" in time_str or "night" in time_str_lower:
+                        time_of_day = "夜"
+                    elif "晨" in time_str or "dawn" in time_str_lower or "清晨" in time_str:
+                        time_of_day = "晨"
+                    elif "昏" in time_str or "dusk" in time_str_lower or "黄昏" in time_str or "傍晚" in time_str:
+                        time_of_day = "昏"
+                    elif time_str:
+                        time_of_day = "日"
+
+                scene = self.create_scene(
+                    script_id,
+                    ScriptSceneCreate(
+                        scene_number=str(scene_num),
+                        location=location[:200] if location else "未知场景",
+                        int_ext=int_ext,
+                        time_of_day=time_of_day,
+                        order_index=scene_num,
+                    ),
+                )
+                current_scene_id = scene.id
+                continue
+
+            # Character name (all caps, standalone line, followed by dialogue)
+            if current_scene_id and stripped.isupper() and len(stripped) >= 2 and not stripped.startswith("@"):
+                flush_dialogue()
+                current_char = stripped.title()
+                continue
+
+            # Dialogue text (follows character name)
+            if current_char and stripped:
+                if current_scene_id:
+                    current_dialogue.append(stripped)
+                    continue
+
+            # Action / description
+            if current_scene_id and stripped:
+                current_action.append(stripped)
+            elif stripped == "":
+                flush_dialogue()
+
+        # Flush remaining
+        flush_dialogue()
+
+        return {
+            "scenes": scenes_created,
+            "dialogues": dialogues_created,
+            "characters": len(characters_seen),
+        }
+
+    def _parse_novel(self, script_id: int, text: str) -> dict:
+        """Parse novel/story text into scenes.
+
+        Treats chapters as scenes, and dialogue in quotes as character lines.
+        """
+        lines = text.split("\n")
+        scenes_created = 0
+        dialogues_created = 0
+        characters_seen: dict[str, int] = {}
+        current_scene_id: Optional[int] = None
+        current_action: list[str] = []
+        scene_num = 0
+
+        # Chapter patterns: 第X章 / 第X节 / Chapter X / === title ===
+        chapter_pattern = re.compile(
+            r"^(第[一二三四五六七八九十百千零\d]+[章回节集篇卷]|Chapter\s+\d+|\={2,}.*\={2,})",
+            re.IGNORECASE,
+        )
+
+        # Dialogue patterns: "xxx" or 「xxx」 or “xxx”
+        dialogue_pattern = re.compile(r'[""「『](.+?)[""」』]')
+
+        def flush_action():
+            nonlocal current_action, current_scene_id
+            if current_action and current_scene_id:
+                # Append to scene description
+                pass
+            current_action = []
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            # New chapter = new scene
+            if chapter_pattern.match(stripped):
+                scene_num += 1
+                scenes_created += 1
+                flush_action()
+                scene = self.create_scene(
+                    script_id,
+                    ScriptSceneCreate(
+                        scene_number=str(scene_num),
+                        location=stripped[:200],
+                        int_ext="INT",
+                        time_of_day="日",
+                        description=stripped,
+                        order_index=scene_num,
+                    ),
+                )
+                current_scene_id = scene.id
+                continue
+
+            # Create a default first scene if none yet
+            if not current_scene_id:
+                scene_num += 1
+                scenes_created += 1
+                scene = self.create_scene(
+                    script_id,
+                    ScriptSceneCreate(
+                        scene_number=str(scene_num),
+                        location="开场",
+                        int_ext="INT",
+                        time_of_day="日",
+                        description="故事开场",
+                        order_index=scene_num,
+                    ),
+                )
+                current_scene_id = scene.id
+
+            # Extract dialogues from quoted text
+            dialogues = dialogue_pattern.findall(stripped)
+            if dialogues:
+                for dlg_text in dialogues:
+                    # Try to find speaker (text before the quote)
+                    speaker = self._guess_speaker(stripped, dlg_text)
+                    char_id = characters_seen.get(speaker)
+                    if not char_id:
+                        char = self.create_character(
+                            script_id,
+                            ScriptCharacterCreate(name=speaker, character_type="配角"),
+                        )
+                        characters_seen[speaker] = char.id
+                        char_id = char.id
+
+                    self.create_dialogue(
+                        current_scene_id,
+                        ScriptDialogueCreate(
+                            character_name=speaker,
+                            character_id=char_id,
+                            dialogue=dlg_text,
+                            order_index=dialogues_created,
+                        ),
+                    )
+                    dialogues_created += 1
+            else:
+                # Narrative / action
+                current_action.append(stripped)
+
+        return {
+            "scenes": scenes_created,
+            "dialogues": dialogues_created,
+            "characters": len(characters_seen),
+        }
+
+    def _guess_speaker(self, line: str, dialogue_text: str) -> str:
+        """Try to guess who is speaking from the context line."""
+        # Look for patterns like "张三说：..." or "他道：..."
+        dlg_idx = line.find('"')
+        if dlg_idx == -1:
+            dlg_idx = line.find('"')
+        if dlg_idx == -1:
+            dlg_idx = line.find('「')
+        if dlg_idx == -1:
+            dlg_idx = line.find('『')
+
+        if dlg_idx > 0:
+            before = line[:dlg_idx].strip()
+            # Try to find a name + speaking verb
+            speak_verbs = ["说", "道", "问", "答", "喊", "叫", "低语", "轻声",
+                          "叹", "笑", "冷笑", "怒道", "平静", "开口", "说道"]
+            for verb in speak_verbs:
+                if before.endswith(verb):
+                    name = before[:-len(verb)].strip()
+                    if name and len(name) <= 10:
+                        return name
+            # If the whole prefix is short, treat it as speaker
+            if 1 <= len(before) <= 6 and before not in ("他", "她", "我", "你"):
+                return before
+
+        return "未知角色"
 
     # ── Episode Management ─────────────────────────────────────────────────
 

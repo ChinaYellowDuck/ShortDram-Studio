@@ -1,11 +1,23 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, MagicStick, Notebook, User, VideoPlay } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, MagicStick, Notebook, Upload, UploadFilled, User, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { errorMessage } from '../api/client'
-import { createScript, generateCharacters, generateEpisodeScript, generateOutline, getScript, listCharacters, listEpisodes, listScripts, updateScript } from '../api/scripts'
+import {
+  createScript,
+  generateCharacters,
+  generateEpisodeScript,
+  generateOutline,
+  getScript,
+  importScriptFile,
+  importScriptText,
+  listCharacters,
+  listEpisodes,
+  listScripts,
+  updateScript,
+} from '../api/scripts'
 import type {
   ScriptDetail,
   ScriptCharacter,
@@ -182,6 +194,49 @@ async function handleEpisodeClick(ep: (typeof episodes.value)[number]) {
   }
 }
 
+// 导入相关
+const importVisible = ref('')
+const importMode = ref<'text' | 'file'>('text')
+const importType = ref<'auto' | 'novel' | 'fountain'>('auto')
+const importText = ref('')
+const importFile = ref<File | null>(null)
+const importing = ref(false)
+const importStats = ref<{ format: string; scenes: number; dialogues: number; characters: number } | null>(null)
+
+async function doImport() {
+  if (!script.value) return
+  importing.value = true
+  importStats.value = null
+  try {
+    let result
+    if (importMode.value === 'text') {
+      if (!importText.value.trim()) {
+        ElMessage.warning('请输入要导入的文本')
+        return
+      }
+      result = await importScriptText(script.value.id, importText.value, importType.value)
+    } else {
+      if (!importFile.value) {
+        ElMessage.warning('请选择要导入的文件')
+        return
+      }
+      result = await importScriptFile(script.value.id, importFile.value, importType.value)
+    }
+    importStats.value = result
+    ElMessage.success(`导入成功！${result.scenes}个场景、${result.dialogues}段对白`)
+    await loadScript()
+    activeStep.value = 'episodes'
+  } catch (err) {
+    ElMessage.error(errorMessage(err))
+  } finally {
+    importing.value = false
+  }
+}
+
+function handleFileChange(file: any) {
+  importFile.value = file.raw
+}
+
 // ── 步骤切换 ──────────────────────────────────────────────
 function goToStep(index: number) {
   const target = steps[index]
@@ -271,6 +326,79 @@ onMounted(loadScript)
             下一步：生成故事大纲
           </el-button>
         </div>
+
+        <el-divider>或</el-divider>
+
+        <el-collapse v-model="importVisible" class="import-collapse">
+          <el-collapse-item name="import" title="📄 直接导入剧本 / 小说">
+            <p class="import-hint">
+              支持粘贴文本或上传文件，自动识别剧本格式，智能解析场景、角色和对白。
+            </p>
+
+            <div class="import-toolbar">
+              <el-radio-group v-model="importMode" size="default">
+                <el-radio-button value="text">粘贴文本</el-radio-button>
+                <el-radio-button value="file">上传文件</el-radio-button>
+              </el-radio-group>
+
+              <el-select v-model="importType" style="width: 160px; margin-left: 12px">
+                <el-option label="自动识别" value="auto" />
+                <el-option label="小说格式" value="novel" />
+                <el-option label="Fountain 剧本" value="fountain" />
+              </el-select>
+            </div>
+
+            <div v-show="importMode === 'text'" style="margin-top: 16px">
+              <el-input
+                v-model="importText"
+                type="textarea"
+                :rows="10"
+                placeholder="粘贴小说或剧本内容...&#10;&#10;支持格式：&#10;• 小说：按章节自动分场景，引号内文字识别为对白&#10;• Fountain：标准剧本格式（INT./EXT. 场景标题 + 大写角色名 + 对白）"
+                class="import-textarea"
+              />
+            </div>
+
+            <div v-show="importMode === 'file'" style="margin-top: 16px">
+              <el-upload
+                drag
+                :auto-upload="false"
+                :limit="1"
+                accept=".txt,.fountain,.md"
+                :on-change="handleFileChange"
+                class="import-upload"
+              >
+                <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+                <div class="el-upload__text">
+                  拖拽文件到这里，或 <em>点击上传</em>
+                </div>
+                <template #tip>
+                  <div class="el-upload__tip">
+                    支持 .txt / .fountain 文件，单文件不超过 10MB
+                  </div>
+                </template>
+              </el-upload>
+            </div>
+
+            <div class="step-actions">
+              <el-button
+                type="success"
+                :icon="Upload"
+                size="large"
+                :loading="importing"
+                @click="doImport"
+              >
+                开始导入
+              </el-button>
+            </div>
+
+            <el-result
+              v-if="importStats"
+              icon="success"
+              title="导入完成"
+              :sub-title="`识别格式：${importStats.format}，创建 ${importStats.scenes} 个场景、${importStats.dialogues} 段对白、${importStats.characters} 个角色`"
+            />
+          </el-collapse-item>
+        </el-collapse>
       </div>
     </div>
 
@@ -678,5 +806,29 @@ onMounted(loadScript)
   background: var(--el-fill-color-lighter);
   border-radius: 8px;
   margin-bottom: 24px;
+}
+
+.import-collapse {
+  margin-top: 8px;
+}
+
+.import-hint {
+  margin: 0 0 16px 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.import-toolbar {
+  display: flex;
+  align-items: center;
+}
+
+.import-textarea :deep(.el-textarea__inner) {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.import-upload {
+  width: 100%;
 }
 </style>
