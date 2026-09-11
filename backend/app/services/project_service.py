@@ -186,6 +186,9 @@ class ProjectService:
 
         if target_phase == ProjectPhase.COMPLETED:
             project.status = ProjectStatus.COMPLETED
+        elif project.status == ProjectStatus.COMPLETED:
+            # Rolling back from completed, set back to in_progress
+            project.status = ProjectStatus.IN_PROGRESS
         elif project.status == ProjectStatus.DRAFT and target_phase != ProjectPhase.SCRIPT:
             project.status = ProjectStatus.IN_PROGRESS
 
