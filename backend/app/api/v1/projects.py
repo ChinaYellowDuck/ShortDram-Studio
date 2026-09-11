@@ -2,9 +2,9 @@
 from fastapi import APIRouter, Query, status
 
 from app.api.deps import ProjectServiceDep
-from app.models.project import ProjectStatus
+from app.models.project import ProjectPhase, ProjectStatus
 from app.schemas.common import PaginatedResponse
-from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
+from app.schemas.project import PhaseTransition, ProjectCreate, ProjectResponse, ProjectUpdate
 
 router = APIRouter()
 
@@ -70,3 +70,13 @@ def update_project_status(
 ):
     """Update the status of a project."""
     return service.update_status(project_id, new_status)
+
+
+@router.post("/{project_id}/phase", response_model=ProjectResponse, summary="切换项目阶段")
+def transition_phase(
+    project_id: int,
+    transition: PhaseTransition,
+    service: ProjectServiceDep,
+):
+    """Transition project to a target production phase."""
+    return service.advance_phase(project_id, transition.target_phase)

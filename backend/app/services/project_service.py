@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models.project import Project, ProjectStatus
+from app.models.project import Project, ProjectPhase, ProjectStatus
 from app.schemas.project import ProjectCreate, ProjectUpdate
 
 
@@ -150,3 +150,45 @@ class ProjectService:
         self.db.commit()
         self.db.refresh(db_project)
         return db_project
+
+    def advance_phase(self, project_id: int, target_phase: ProjectPhase) -> Project:
+        """Transition project to target phase.
+
+        Both forward and backward transitions are allowed.
+        Auto-updates project status when entering completed phase.
+
+        Args:
+            project_id: Project ID.
+            target_phase: Target phase to transition to.
+
+        Returns:
+            Updated Project.
+
+        Raises:
+            HTTPException: 404 if project not found, 400 if invalid phase.
+        """
+        project = self.get_by_id_or_404(project_id)
+
+        valid_phases = [
+            ProjectPhase.SCRIPT,
+            ProjectPhase.ASSET,
+            ProjectPhase.STORYBOARD,
+            ProjectPhase.VIDEO,
+            ProjectPhase.COMPLETED,
+        ]
+        if target_phase not in valid_phases:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid phase: {target_phase}",
+            )
+
+        project.phase = target_phase
+
+        if target_phase == ProjectPhase.COMPLETED:
+            project.status = ProjectStatus.COMPLETED
+        elif project.status == ProjectStatus.DRAFT and target_phase != ProjectPhase.SCRIPT:
+            project.status = ProjectStatus.IN_PROGRESS
+
+        self.db.commit()
+        self.db.refresh(project)
+        return project
