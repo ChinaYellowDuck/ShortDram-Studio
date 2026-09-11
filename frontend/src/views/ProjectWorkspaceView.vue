@@ -20,6 +20,7 @@ import {
 } from 'element-plus'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import ScriptWizardView from './ScriptWizardView.vue'
 
 import { errorMessage } from '../api/client'
 import {
@@ -414,14 +415,7 @@ function handleTabChange(tabName: string) {
       <el-tabs v-model="activeModule" class="modules-tabs" @tab-change="handleTabChange">
         <!-- 剧本模块 -->
         <el-tab-pane label="剧本管理" name="script">
-          <div class="module-placeholder">
-            <el-icon :size="64" color="#409eff"><MagicStick /></el-icon>
-            <h3>剧本管理</h3>
-            <p>分步引导模式：小说导入 → 大纲确认 → 人物生成 → 逐集剧本生成</p>
-            <el-button type="primary" @click="router.push(`/projects/${projectId}/script`)">
-              打开剧本编辑器
-            </el-button>
-          </div>
+          <ScriptWizardView />
         </el-tab-pane>
 
         <!-- 资产模块 -->

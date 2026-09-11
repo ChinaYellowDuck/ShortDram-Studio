@@ -1,6 +1,8 @@
 import { api } from './client'
 import type {
+  CharactersGenerateRequest,
   FountainExport,
+  OutlineGenerateRequest,
   Paginated,
   ProducerCreateResponse,
   SceneRefineResponse,
@@ -12,6 +14,9 @@ import type {
   ScriptDialogue,
   ScriptDialogueCreate,
   ScriptDialogueUpdate,
+  ScriptEpisode,
+  ScriptEpisodeCreate,
+  ScriptEpisodeUpdate,
   ScriptGenerateRequest,
   ScriptGenerateResponse,
   ScriptScene,
@@ -59,6 +64,72 @@ export async function deleteScript(scriptId: number): Promise<void> {
 
 export async function exportFountain(scriptId: number): Promise<FountainExport> {
   const { data } = await api.get<FountainExport>(`/scripts/${scriptId}/export/fountain`)
+  return data
+}
+
+// ── Episode ─────────────────────────────────────────────────────────────────
+
+export async function listEpisodes(scriptId: number): Promise<ScriptEpisode[]> {
+  const { data } = await api.get<ScriptEpisode[]>(`/scripts/${scriptId}/episodes`)
+  return data
+}
+
+export async function createEpisode(
+  scriptId: number,
+  payload: ScriptEpisodeCreate,
+): Promise<ScriptEpisode> {
+  const { data } = await api.post<ScriptEpisode>(`/scripts/${scriptId}/episodes`, payload)
+  return data
+}
+
+export async function getEpisode(episodeId: number): Promise<ScriptEpisode> {
+  const { data } = await api.get<ScriptEpisode>(`/scripts/episodes/${episodeId}`)
+  return data
+}
+
+export async function updateEpisode(
+  episodeId: number,
+  payload: ScriptEpisodeUpdate,
+): Promise<ScriptEpisode> {
+  const { data } = await api.put<ScriptEpisode>(`/scripts/episodes/${episodeId}`, payload)
+  return data
+}
+
+export async function deleteEpisode(episodeId: number): Promise<void> {
+  await api.delete(`/scripts/episodes/${episodeId}`)
+}
+
+// ── Wizard / Generation ─────────────────────────────────────────────────────
+
+export async function generateOutline(
+  scriptId: number,
+  payload: OutlineGenerateRequest,
+): Promise<ScriptDetail> {
+  const { data } = await api.post<ScriptDetail>(
+    `/scripts/${scriptId}/outline/generate`,
+    payload,
+  )
+  return data
+}
+
+export async function generateCharacters(
+  scriptId: number,
+  payload: CharactersGenerateRequest,
+): Promise<ScriptCharacter[]> {
+  const { data } = await api.post<ScriptCharacter[]>(
+    `/scripts/${scriptId}/characters/generate`,
+    payload,
+  )
+  return data
+}
+
+export async function generateEpisodeScript(
+  scriptId: number,
+  episodeNumber: number,
+): Promise<ScriptEpisode> {
+  const { data } = await api.post<ScriptEpisode>(
+    `/scripts/${scriptId}/episodes/${episodeNumber}/generate`,
+  )
   return data
 }
 

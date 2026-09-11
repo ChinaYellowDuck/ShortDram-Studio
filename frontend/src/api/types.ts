@@ -182,6 +182,7 @@ export interface RootInfo {
 
 // ── Script types ────────────────────────────────────────────────────────────
 
+export type ScriptGenerationStage = 'idea' | 'outline' | 'characters' | 'episodes' | 'completed'
 export type IntExt = 'INT' | 'EXT' | 'INT/EXT'
 export type TimeOfDay = '日' | '夜' | '晨' | '昏' | '不限'
 export type CharacterType = '主角' | '配角' | '客串' | '龙套'
@@ -301,6 +302,9 @@ export interface Script {
   total_episodes: number
   synopsis: string | null
   version: string
+  generation_stage: ScriptGenerationStage
+  episode_outlines: Record<string, unknown>[] | null
+  core_idea: string | null
   created_at: string
   updated_at: string
 }
@@ -308,6 +312,7 @@ export interface Script {
 export interface ScriptDetail extends Script {
   scenes: ScriptScene[]
   characters: ScriptCharacter[]
+  episodes: ScriptEpisode[]
 }
 
 export interface ScriptCreate {
@@ -319,6 +324,8 @@ export interface ScriptCreate {
   total_episodes?: number
   synopsis?: string | null
   version?: string
+  generation_stage?: ScriptGenerationStage
+  core_idea?: string | null
 }
 
 export interface ScriptUpdate {
@@ -329,6 +336,9 @@ export interface ScriptUpdate {
   total_episodes?: number
   synopsis?: string | null
   version?: string
+  generation_stage?: ScriptGenerationStage
+  episode_outlines?: Record<string, unknown>[] | null
+  core_idea?: string | null
 }
 
 export interface ScriptGenerateRequest {
@@ -531,4 +541,52 @@ export interface StoryboardShotUpdate {
 
 export interface ReorderRequest {
   shot_ids: number[]
+}
+
+// ── Script Episode types ────────────────────────────────────────────────────
+
+export interface ScriptEpisode {
+  id: number
+  script_id: number
+  episode_number: number
+  title: string | null
+  synopsis: string | null
+  duration_seconds: number | null
+  is_generated: boolean
+  order_index: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ScriptEpisodeCreate {
+  episode_number: number
+  title?: string | null
+  synopsis?: string | null
+  duration_seconds?: number | null
+  is_generated?: boolean
+  order_index?: number
+}
+
+export interface ScriptEpisodeUpdate {
+  episode_number?: number
+  title?: string | null
+  synopsis?: string | null
+  duration_seconds?: number | null
+  is_generated?: boolean
+  order_index?: number
+}
+
+// ── Script Wizard Request types ─────────────────────────────────────────────
+
+export interface OutlineGenerateRequest {
+  idea: string
+  genre?: string
+  style?: string
+  total_episodes?: number
+  llm_config_id?: number
+}
+
+export interface CharactersGenerateRequest {
+  num_characters?: number
+  llm_config_id?: number
 }
