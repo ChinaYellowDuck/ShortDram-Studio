@@ -6,6 +6,7 @@ and provides Fountain format export.
 from typing import List, Optional, Tuple
 
 from fastapi import HTTPException, status
+from loguru import logger
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.script import (
@@ -811,8 +812,7 @@ class ScriptService:
     ) -> Tuple[Script, List[dict]]:
         """Generate story outline and episode outlines.
 
-        Note: Actual AI generation is handled by the agent layer.
-        This method sets up the script data structure for generation.
+        Uses the screenwriter agent if available, otherwise creates placeholder structure.
         """
         script = self.get_by_id_or_404(script_id)
         script.core_idea = idea
@@ -820,30 +820,92 @@ class ScriptService:
         script.style = style
         script.total_episodes = total_episodes
 
-        # Create placeholder episode outlines
-        outlines = []
-        for i in range(total_episodes):
-            outlines.append({
-                "episode_number": i + 1,
-                "title": f"第{i + 1}集",
-                "synopsis": "",  # Will be filled by AI
-                "hook": "",
-                "cliffhanger": "",
-            })
+        # Try using screenwriter agent
+        from app.agents.manager import AgentManager
 
-        script.episode_outlines = outlines
-        script.generation_stage = ScriptGenerationStage.OUTLINE
-
-        # Create episode records
-        for i in range(total_episodes):
-            ep = ScriptEpisode(
-                script_id=script.id,
-                episode_number=i + 1,
-                title=f"第{i + 1}集",
-                order_index=i,
-                is_generated=False,
+        agent_result = None
+        try:
+            mgr = AgentManager(self.db)
+            agent_result = mgr.invoke(
+                "screenwriter",
+                "generate_script",
+                project_id=script.project_id,
+                idea=idea,
+                genre=genre,
+                style=style or "",
+                num_scenes=max(total_episodes, 5),
             )
-            self.db.add(ep)
+        except Exception as e:
+            logger.warning(f"[ScriptService] Screenwriter agent unavailable: {e}")
+
+        if agent_result and agent_result.get("synopsis"):
+            # Use AI-generated content
+            script.synopsis = agent_result.get("synopsis", "")
+            script.logline = agent_result.get("logline", "")
+
+            ai_characters = agent_result.get("characters", [])
+            ai_scenes = agent_result.get("scene_outlines", [])
+
+            # Build episode outlines from AI scenes (group scenes into episodes)
+            outlines = []
+            scenes_per_ep = max(1, len(ai_scenes) // max(total_episodes, 1))
+
+            for i in range(total_episodes):
+                start = i * scenes_per_ep
+                end = start + scenes_per_ep if i < total_episodes - 1 else len(ai_scenes)
+                ep_scenes = ai_scenes[start:end] if ai_scenes else []
+                synopsis = " ".join(
+                    [s.get("description", "") for s in ep_scenes if isinstance(s, dict)]
+                )
+                outlines.append({
+                    "episode_number": i + 1,
+                    "title": f"第{i + 1}集",
+                    "synopsis": synopsis[:300] or f"第{i + 1}集剧情",
+                    "hook": ep_scenes[0].get("description", "")[:100] if ep_scenes and isinstance(ep_scenes[0], dict) else "",
+                    "cliffhanger": ep_scenes[-1].get("description", "")[:100] if ep_scenes and isinstance(ep_scenes[-1], dict) else "",
+                })
+
+            script.episode_outlines = outlines
+            script.generation_stage = ScriptGenerationStage.OUTLINE
+
+            # Store AI characters for later use (in generate_characters)
+            self.db.info["ai_characters"] = ai_characters
+
+            # Create episode records
+            for i in range(total_episodes):
+                ep = ScriptEpisode(
+                    script_id=script.id,
+                    episode_number=i + 1,
+                    title=f"第{i + 1}集",
+                    order_index=i,
+                    is_generated=False,
+                )
+                self.db.add(ep)
+        else:
+            # Fallback: create placeholder structure
+            outlines = []
+            for i in range(total_episodes):
+                outlines.append({
+                    "episode_number": i + 1,
+                    "title": f"第{i + 1}集",
+                    "synopsis": "",
+                    "hook": "",
+                    "cliffhanger": "",
+                })
+
+            script.episode_outlines = outlines
+            script.generation_stage = ScriptGenerationStage.OUTLINE
+
+            # Create episode records
+            for i in range(total_episodes):
+                ep = ScriptEpisode(
+                    script_id=script.id,
+                    episode_number=i + 1,
+                    title=f"第{i + 1}集",
+                    order_index=i,
+                    is_generated=False,
+                )
+                self.db.add(ep)
 
         self.db.commit()
         self.db.refresh(script)
@@ -856,14 +918,53 @@ class ScriptService:
     ) -> List[ScriptCharacter]:
         """Generate characters for the script.
 
-        Note: Actual AI generation handled by agent layer.
-        This method advances the stage and returns current characters.
+        Uses the screenwriter agent if available. Falls back to placeholders.
         """
         script = self.get_by_id_or_404(script_id)
 
-        # If no characters exist yet, create placeholders
         existing = self.list_characters(script_id)
-        if not existing:
+        if existing:
+            script.generation_stage = ScriptGenerationStage.CHARACTERS
+            self.db.commit()
+            return existing
+
+        # Try to get AI-generated characters from the outline step
+        from app.agents.manager import AgentManager
+
+        ai_characters = None
+        try:
+            mgr = AgentManager(self.db)
+            # Re-run outline generation if we need characters from agent
+            # Or use a lightweight character generation
+            result = mgr.invoke(
+                "screenwriter",
+                "generate_script",
+                project_id=script.project_id,
+                idea=script.core_idea or script.title or "短剧故事",
+                genre=script.genre or "都市",
+                style=script.style or "",
+                num_scenes=5,
+            )
+            if result:
+                ai_characters = result.get("characters", [])
+        except Exception as e:
+            logger.warning(f"[ScriptService] Character generation via agent failed: {e}")
+
+        if ai_characters:
+            for idx, char in enumerate(ai_characters):
+                if isinstance(char, dict):
+                    name = char.get("name", f"角色{idx + 1}")
+                    desc = char.get("description", char.get("backstory", ""))
+                    role_type = char.get("role", "主角" if idx == 0 else "配角")
+                    if isinstance(role_type, str) and role_type not in ("主角", "配角", "客串"):
+                        role_type = "主角" if idx == 0 else "配角"
+                    self.create_character(script_id, ScriptCharacterCreate(
+                        name=name[:50],
+                        character_type=role_type,
+                        description=desc[:500] if desc else "",
+                    ))
+        else:
+            # Fallback: placeholders
             for i in range(num_characters):
                 self.create_character(script_id, ScriptCharacterCreate(
                     name=f"角色{i + 1}",
