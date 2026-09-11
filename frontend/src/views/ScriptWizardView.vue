@@ -5,7 +5,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { errorMessage } from '../api/client'
-import { createScript, generateCharacters, generateOutline, getScript, listCharacters, listScripts, updateScript } from '../api/scripts'
+import { createScript, generateCharacters, generateOutline, getScript, listCharacters, listEpisodes, listScripts, updateScript } from '../api/scripts'
 import type {
   ScriptDetail,
   ScriptCharacter,
@@ -75,7 +75,7 @@ async function loadScript() {
       }
       // Load episodes
       if (detail.generation_stage !== 'idea') {
-        const eps = await import('../api/scripts').then((m) => m.listEpisodes(detail.id))
+        const eps = await listEpisodes(detail.id)
         episodes.value = eps
       }
       if (detail.generation_stage === 'characters' || detail.generation_stage === 'episodes' || detail.generation_stage === 'completed') {
@@ -129,7 +129,7 @@ async function generateOutlineStep() {
     script.value = result
 
     // 加载分集列表
-    const eps = await import('../api/scripts').then((m) => m.listEpisodes(sid))
+    const eps = await listEpisodes(sid)
     episodes.value = eps
 
     activeStep.value = 'outline'
