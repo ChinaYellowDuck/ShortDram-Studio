@@ -9,6 +9,7 @@ export interface Paginated<T> {
 }
 
 export type ProjectStatus = 'draft' | 'in_progress' | 'completed' | 'archived'
+export type ProjectPhase = 'script' | 'asset' | 'storyboard' | 'video' | 'completed'
 
 export interface Project {
   id: number
@@ -16,6 +17,7 @@ export interface Project {
   description: string | null
   cover_image: string | null
   status: ProjectStatus
+  phase: ProjectPhase
   created_at: string
   updated_at: string
 }
@@ -25,6 +27,11 @@ export interface ProjectCreate {
   description?: string | null
   cover_image?: string | null
   status?: ProjectStatus
+  phase?: ProjectPhase
+}
+
+export interface PhaseTransition {
+  target_phase: ProjectPhase
 }
 
 export interface LLMConfig {
@@ -429,4 +436,99 @@ export interface FountainExport {
   title: string
   content: string
   format: string
+}
+
+// ── Asset types ─────────────────────────────────────────────────────────────
+
+export type AssetType = 'character' | 'scene' | 'prop'
+export type AssetSource = 'ai_extracted' | 'manual'
+
+export interface Asset {
+  id: number
+  project_id: number
+  type: AssetType
+  name: string
+  description: string | null
+  image_url: string | null
+  extra: Record<string, unknown> | null
+  source: AssetSource
+  reference_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface AssetCreate {
+  type: AssetType
+  name: string
+  description?: string | null
+  image_url?: string | null
+  extra?: Record<string, unknown> | null
+  source?: AssetSource
+  reference_count?: number
+}
+
+export interface AssetUpdate {
+  type?: AssetType
+  name?: string
+  description?: string | null
+  image_url?: string | null
+  extra?: Record<string, unknown> | null
+  source?: AssetSource
+  reference_count?: number
+}
+
+// ── Storyboard types ───────────────────────────────────────────────────────
+
+export type CompositionType = '大远景' | '远景' | '全景' | '中景' | '中近景' | '近景' | '特写'
+export type CameraMovement = '固定' | '推' | '拉' | '摇' | '移' | '跟' | '变焦'
+export type CameraAngle = '平视' | '仰视' | '俯视' | '侧视' | '倾斜'
+
+export interface StoryboardShot {
+  id: number
+  project_id: number
+  script_scene_id: number
+  shot_number: string
+  order_index: number
+  composition: CompositionType
+  camera_movement: CameraMovement
+  camera_angle: CameraAngle
+  visual_description: string | null
+  duration_seconds: number
+  key_frame_url: string | null
+  character_ids: number[] | null
+  prop_ids: number[] | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StoryboardShotCreate {
+  script_scene_id: number
+  shot_number: string
+  order_index?: number
+  composition?: CompositionType
+  camera_movement?: CameraMovement
+  camera_angle?: CameraAngle
+  visual_description?: string | null
+  duration_seconds?: number
+  key_frame_url?: string | null
+  character_ids?: number[] | null
+  prop_ids?: number[] | null
+}
+
+export interface StoryboardShotUpdate {
+  script_scene_id?: number
+  shot_number?: string
+  order_index?: number
+  composition?: CompositionType
+  camera_movement?: CameraMovement
+  camera_angle?: CameraAngle
+  visual_description?: string | null
+  duration_seconds?: number
+  key_frame_url?: string | null
+  character_ids?: number[] | null
+  prop_ids?: number[] | null
+}
+
+export interface ReorderRequest {
+  shot_ids: number[]
 }
