@@ -79,3 +79,16 @@ def set_agent_enabled(service: AgentServiceDep, agent_id: int, enabled: bool):
     - **enabled**: true=启用, false=禁用
     """
     return service.set_enabled(agent_id, enabled)
+
+
+@router.get("/{agent_id}/mcp-tools", summary="获取智能体绑定的 MCP 工具列表")
+def list_agent_mcp_tools(service: AgentServiceDep, agent_id: int):
+    """Get all MCP tools available to this agent.
+
+    Fetches tool definitions from cached MCP server data.
+    """
+    tools = service.list_mcp_tools(agent_id)
+    return {
+        "tools": tools,
+        "total": len(tools),
+    }

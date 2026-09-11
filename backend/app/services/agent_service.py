@@ -187,6 +187,32 @@ class AgentService:
         self.db.refresh(agent)
         return agent
 
+    def list_mcp_tools(self, agent_id: int) -> list[dict]:
+        """List all MCP tools available to an agent.
+
+        Returns combined tools from all enabled, bound MCP servers.
+        Tools are read from the cached `tools` field on each MCP.
+        """
+        from app.models.mcp import Mcp
+
+        agent = self.get_by_id_or_404(agent_id)
+        all_tools: list[dict] = []
+
+        if not hasattr(agent, 'mcps'):
+            return all_tools
+
+        for mcp in agent.mcps:
+            if not getattr(mcp, 'is_enabled', True):
+                continue
+            tools = getattr(mcp, 'tools', None) or []
+            for t in tools:
+                tool_data = dict(t) if isinstance(t, dict) else {"name": str(t)}
+                tool_data["mcp_server_id"] = mcp.id
+                tool_data["mcp_server_name"] = mcp.name
+                all_tools.append(tool_data)
+
+        return all_tools
+
     def _validate_default_llm(self, config_id: Optional[int]) -> None:
         """Ensure an agent default references an existing text model."""
         if config_id is None:

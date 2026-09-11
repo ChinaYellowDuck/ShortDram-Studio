@@ -28,6 +28,14 @@ export async function setAgentEnabled(id: number, enabled: boolean): Promise<Age
   return data
 }
 
+export async function listAgentMcpTools(agentId: number): Promise<{
+  tools: Array<Record<string, unknown>>
+  total: number
+}> {
+  const { data } = await api.get(`/agents/meta/${agentId}/mcp-tools`)
+  return data
+}
+
 export async function chatWithAgent(
   agentKey: string,
   message: string,

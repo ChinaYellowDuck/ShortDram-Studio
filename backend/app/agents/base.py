@@ -2,11 +2,13 @@
 import json
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.language_models import BaseChatModel
 from langgraph.graph import StateGraph
 from sqlalchemy.orm import Session
+
+from app.agents.mcp_client import McpTool, McpToolClient
 
 
 class BaseAgent(ABC):
@@ -15,15 +17,25 @@ class BaseAgent(ABC):
     All agents should inherit from this class and implement the required methods.
     """
 
-    def __init__(self, llm: BaseChatModel, config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        llm: BaseChatModel,
+        config: Optional[Dict[str, Any]] = None,
+        mcp_tools: Optional[List[McpTool]] = None,
+        mcp_clients: Optional[Dict[int, McpToolClient]] = None,
+    ):
         """Initialize the agent.
 
         Args:
             llm: The language model to use.
             config: Optional agent-specific configuration.
+            mcp_tools: List of MCP tools available to this agent.
+            mcp_clients: Dict of MCP clients keyed by server ID (for tool calls).
         """
         self.llm = llm
         self.config = config or {}
+        self.mcp_tools = mcp_tools or []
+        self.mcp_clients = mcp_clients or {}
         self._graph = None
 
     @property
@@ -61,6 +73,54 @@ class BaseAgent(ABC):
         if self._graph is None:
             self._graph = self.build_graph().compile()
         return self._graph
+
+    # ── MCP tool helpers ────────────────────────────────────
+
+    def get_available_mcp_tools(self) -> List[McpTool]:
+        """Get all available MCP tools for this agent."""
+        return self.mcp_tools
+
+    def get_mcp_tools_as_functions(self) -> List[Dict[str, Any]]:
+        """Get MCP tools in OpenAI function calling format."""
+        return [t.to_openai_function() for t in self.mcp_tools]
+
+    def call_mcp_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+        """Call an MCP tool by name.
+
+        Searches through all available MCP clients to find the tool.
+
+        Args:
+            tool_name: Name of the tool to call.
+            arguments: Tool arguments.
+
+        Returns:
+            Tool result.
+
+        Raises:
+            ValueError if tool is not found.
+            RuntimeError if tool call fails.
+        """
+        # Find which server has this tool
+        tool = next((t for t in self.mcp_tools if t.name == tool_name), None)
+        if not tool:
+            raise ValueError(f"MCP tool '{tool_name}' not found in available tools")
+
+        client = self.mcp_clients.get(tool.mcp_server_id)
+        if not client:
+            raise RuntimeError(f"MCP client for server '{tool.mcp_server_name}' not available")
+
+        return client.call_tool(tool_name, arguments)
+
+    def call_mcp_tool_text(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+        """Call an MCP tool and return text content."""
+        result = self.call_mcp_tool(tool_name, arguments)
+        if isinstance(result, dict) and "content" in result:
+            texts = []
+            for c in result["content"]:
+                if isinstance(c, dict) and c.get("type") == "text":
+                    texts.append(c.get("text", ""))
+            return "\n".join(texts)
+        return str(result)
 
     # ── Core invoke methods (no DB recording) ────────────────────────────────
 

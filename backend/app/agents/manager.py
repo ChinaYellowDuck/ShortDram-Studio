@@ -102,13 +102,78 @@ class AgentManager:
             logger.warning(f"[AgentManager] Failed to resolve LLM for '{agent_key}': {e}")
             return None
 
+        # Load MCP tools for this agent
+        mcp_tools: list = []
+        mcp_clients: dict = {}
         try:
-            instance = agent_cls(llm=llm)
+            mcp_tools, mcp_clients = self._load_mcp_tools(agent_meta)
+        except Exception as e:
+            logger.warning(f"[AgentManager] Failed to load MCP tools for '{agent_key}': {e}")
+            # Continue without MCP tools - not fatal
+
+        try:
+            instance = agent_cls(
+                llm=llm,
+                mcp_tools=mcp_tools,
+                mcp_clients=mcp_clients,
+            )
             self._instances[cache_key] = instance
             return instance
         except Exception as e:
             logger.error(f"[AgentManager] Failed to instantiate agent '{agent_key}': {e}")
             return None
+
+    def _load_mcp_tools(self, agent_meta) -> tuple[list, dict]:
+        """Load MCP tools and build clients for an agent.
+
+        Returns:
+            Tuple of (mcp_tools_list, mcp_clients_dict keyed by server id).
+        """
+        from app.agents.mcp_client import McpTool, McpToolClient
+
+        mcp_tools: list[McpTool] = []
+        mcp_clients: dict[int, McpToolClient] = {}
+
+        if not hasattr(agent_meta, 'mcps') or not agent_meta.mcps:
+            return mcp_tools, mcp_clients
+
+        for mcp_server in agent_meta.mcps:
+            if not getattr(mcp_server, 'is_enabled', True):
+                continue
+
+            # Build client for this server
+            client = McpToolClient(
+                url=mcp_server.url,
+                transport=mcp_server.transport,
+                config=mcp_server.config or {},
+                secrets=mcp_server.secrets or {},
+                server_id=mcp_server.id,
+                server_name=mcp_server.name,
+            )
+            mcp_clients[mcp_server.id] = client
+
+            # Use cached tools if available, otherwise fetch
+            if getattr(mcp_server, 'tools', None):
+                for t in mcp_server.tools:
+                    tool = McpTool(
+                        name=t.get('name', 'unknown'),
+                        description=t.get('description', ''),
+                        input_schema=t.get('inputSchema') or t.get('input_schema'),
+                        mcp_server_id=mcp_server.id,
+                        mcp_server_name=mcp_server.name,
+                    )
+                    mcp_tools.append(tool)
+            else:
+                # Fetch tools from the server
+                try:
+                    fetched = client.list_tools()
+                    mcp_tools.extend(fetched)
+                except Exception as e:
+                    logger.warning(
+                        f"[AgentManager] Failed to list tools from MCP server '{mcp_server.name}': {e}"
+                    )
+
+        return mcp_tools, mcp_clients
 
     def invoke(
         self,

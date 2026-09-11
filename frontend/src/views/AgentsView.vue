@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Edit, Promotion } from '@element-plus/icons-vue'
+import { Edit, Refresh, Promotion } from '@element-plus/icons-vue'
 import { ElMessage, type TableInstance } from 'element-plus'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 
@@ -7,6 +7,7 @@ import {
   chatWithAgent,
   listAgentMetadata,
   setAgentEnabled,
+  listAgentMcpTools,
   updateAgentMetadata,
 } from '../api/agents'
 import { errorMessage } from '../api/client'
@@ -28,6 +29,22 @@ const tableRef = ref<TableInstance>()
 const editDialogVisible = ref(false)
 const editingAgentId = ref<number | null>(null)
 const editSaving = ref(false)
+const editTab = ref('basic')
+const agentTools = ref<Array<Record<string, unknown>>>([])
+const toolsLoading = ref(false)
+
+async function loadAgentTools() {
+  if (!editingAgentId.value) return
+  toolsLoading.value = true
+  try {
+    const result = await listAgentMcpTools(editingAgentId.value)
+    agentTools.value = result.tools
+  } catch (err) {
+    ElMessage.error(errorMessage(err))
+  } finally {
+    toolsLoading.value = false
+  }
+}
 const editForm = reactive({
   name: '',
   description: '',
@@ -119,6 +136,8 @@ function openEdit(agent: AgentMetadata) {
     mcp_ids: [...agent.mcp_ids],
     skill_ids: [...agent.skill_ids],
   })
+  editTab.value = 'basic'
+  agentTools.value = []
   editDialogVisible.value = true
 }
 
@@ -264,40 +283,70 @@ onMounted(load)
       </div>
     </el-card>
 
-    <el-dialog v-model="editDialogVisible" title="编辑智能体" width="620px">
-      <el-form :model="editForm" label-width="100px">
-        <el-form-item label="名称">
-          <el-input v-model="editForm.name" maxlength="100" />
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-input v-model="editForm.agent_type" maxlength="50" />
-        </el-form-item>
-        <el-form-item label="分类">
-          <el-input v-model="editForm.category" maxlength="50" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="editForm.description" type="textarea" :rows="2" maxlength="500" />
-        </el-form-item>
-        <el-form-item label="温度">
-          <el-slider v-model="editForm.temperature" :min="0" :max="2" :step="0.1" show-input />
-        </el-form-item>
-        <el-form-item label="System 提示">
-          <el-input v-model="editForm.system_message" type="textarea" :rows="3" placeholder="系统提示词（可选）" />
-        </el-form-item>
-        <el-form-item label="绑定 MCP">
-          <el-select v-model="editForm.mcp_ids" multiple clearable style="width: 100%" placeholder="选择要绑定的 MCP">
-            <el-option v-for="mcp in mcps" :key="mcp.id" :label="mcp.name" :value="mcp.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="绑定 Skill">
-          <el-select v-model="editForm.skill_ids" multiple clearable style="width: 100%" placeholder="选择要绑定的 Skill">
-            <el-option v-for="skill in skills" :key="skill.id" :label="skill.name" :value="skill.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="启用">
-          <el-switch v-model="editForm.is_enabled" />
-        </el-form-item>
-      </el-form>
+    <el-dialog v-model="editDialogVisible" title="编辑智能体" width="640px">
+      <el-tabs v-model="editTab">
+        <el-tab-pane label="基础配置" name="basic">
+          <el-form :model="editForm" label-width="100px">
+            <el-form-item label="名称">
+              <el-input v-model="editForm.name" maxlength="100" />
+            </el-form-item>
+            <el-form-item label="类型">
+              <el-input v-model="editForm.agent_type" maxlength="50" />
+            </el-form-item>
+            <el-form-item label="分类">
+              <el-input v-model="editForm.category" maxlength="50" />
+            </el-form-item>
+            <el-form-item label="描述">
+              <el-input v-model="editForm.description" type="textarea" :rows="2" maxlength="500" />
+            </el-form-item>
+            <el-form-item label="温度">
+              <el-slider v-model="editForm.temperature" :min="0" :max="2" :step="0.1" show-input />
+            </el-form-item>
+            <el-form-item label="System 提示">
+              <el-input v-model="editForm.system_message" type="textarea" :rows="3" placeholder="系统提示词（可选）" />
+            </el-form-item>
+            <el-form-item label="绑定 MCP">
+              <el-select v-model="editForm.mcp_ids" multiple clearable style="width: 100%" placeholder="选择要绑定的 MCP">
+                <el-option v-for="mcp in mcps" :key="mcp.id" :label="mcp.name" :value="mcp.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="绑定 Skill">
+              <el-select v-model="editForm.skill_ids" multiple clearable style="width: 100%" placeholder="选择要绑定的 Skill">
+                <el-option v-for="skill in skills" :key="skill.id" :label="skill.name" :value="skill.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="启用">
+              <el-switch v-model="editForm.is_enabled" />
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
+        <el-tab-pane label="MCP 工具" name="mcp-tools">
+          <div class="tools-panel">
+            <div v-if="!editingAgentId" style="color: var(--el-text-color-secondary); text-align: center; padding: 20px 0;">
+              请先保存智能体后再查看 MCP 工具
+            </div>
+            <div v-else>
+              <div class="tools-header">
+                <span class="tools-count">共 {{ agentTools.length }} 个可用工具</span>
+                <el-button size="small" :icon="Refresh" :loading="toolsLoading" @click="loadAgentTools">
+                  刷新
+                </el-button>
+              </div>
+              <el-empty v-if="agentTools.length === 0 && !toolsLoading" description="暂无工具，请先绑定 MCP 并确保工具已缓存" />
+              <div v-else class="tools-list">
+                <div v-for="tool in agentTools" :key="(tool as { name: string }).name" class="tool-card">
+                  <div class="tool-name">{{ (tool as { name: string }).name }}</div>
+                  <div class="tool-server">
+                    <el-tag size="small" type="info">{{ (tool as { mcp_server_name?: string }).mcp_server_name }}</el-tag>
+                  </div>
+                  <div class="tool-desc">{{ (tool as { description?: string }).description || '无描述' }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="editSaving" @click="submitEdit">保存</el-button>
@@ -322,4 +371,56 @@ onMounted(load)
 .chat-item.agent .chat-bubble { background: #fff; border: 1px solid #ebeef5; }
 .chat-item.system .chat-bubble { background: #fef0f0; color: #f56c6c; font-size: 12px; }
 .chat-input { display: flex; gap: 8px; margin-top: 12px; }
+
+.tools-panel {
+  padding: 4px 0;
+}
+
+.tools-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.tools-count {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.tools-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.tool-card {
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-bg-color);
+}
+
+.tool-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--el-color-primary);
+  margin-bottom: 4px;
+}
+
+.tool-server {
+  margin-bottom: 4px;
+}
+
+.tool-desc {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 </style>
