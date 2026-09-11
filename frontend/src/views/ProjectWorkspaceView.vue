@@ -439,6 +439,11 @@ function handleTabChange(tabName: string) {
     <!-- 四大模块 Tab -->
     <el-card shadow="never" class="modules-card">
       <el-tabs v-model="activeModule" class="modules-tabs" @tab-change="handleTabChange">
+        <!-- 智能体配置 -->
+        <el-tab-pane label="智能体" name="agents">
+          <ProjectAgentsView />
+        </el-tab-pane>
+
         <!-- 剧本模块 -->
         <el-tab-pane label="剧本管理" name="script">
           <ScriptWizardView />
@@ -570,10 +575,7 @@ function handleTabChange(tabName: string) {
           </div>
         </el-tab-pane>
 
-        <!-- 智能体配置 -->
-        <el-tab-pane label="智能体" name="agents">
-          <ProjectAgentsView />
-        </el-tab-pane>
+
       </el-tabs>
     </el-card>
 

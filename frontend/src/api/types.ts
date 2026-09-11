@@ -163,6 +163,15 @@ export interface SkillCreate {
   is_enabled?: boolean
 }
 
+export interface SkillImportResult {
+  total: number
+  created: number
+  updated: number
+  skipped: number
+  errors: string[]
+  imported_ids: number[]
+}
+
 export interface AgentChatResponse {
   agent: string
   run_id: number
