@@ -4,8 +4,7 @@ Scene-level granularity: one ScriptScene = one StoryboardShot.
 """
 import enum
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Enum, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
@@ -91,12 +90,8 @@ class StoryboardShot(BaseModel):
     visual_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_seconds: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     key_frame_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    character_ids: Mapped[list | None] = mapped_column(
-        JSONB().with_variant(Text, "sqlite"), nullable=True
-    )
-    prop_ids: Mapped[list | None] = mapped_column(
-        JSONB().with_variant(Text, "sqlite"), nullable=True
-    )
+    character_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    prop_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     def __repr__(self) -> str:
         return f"<StoryboardShot(id={self.id}, shot_number='{self.shot_number}')>"

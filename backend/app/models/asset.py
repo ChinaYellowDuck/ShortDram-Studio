@@ -5,8 +5,7 @@ All assets belong to a project and can be referenced by storyboard shots.
 """
 import enum
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Enum, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
@@ -54,9 +53,7 @@ class Asset(BaseModel):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    extra: Mapped[dict | None] = mapped_column(
-        JSONB().with_variant(Text, "sqlite"), nullable=True
-    )
+    extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     source: Mapped[AssetSource] = mapped_column(
         Enum(AssetSource, values_callable=lambda x: [e.value for e in x]),
         default=AssetSource.MANUAL,
