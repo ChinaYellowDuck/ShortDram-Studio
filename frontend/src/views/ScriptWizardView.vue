@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, MagicStick, Notebook, Upload, UploadFilled, User, VideoPlay } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, MagicStick, Notebook, Setting, Upload, UploadFilled, User, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { errorMessage } from '../api/client'
+import { listAvailableAgents, listProjectAgents, setupProjectAgents } from '../api/projectAgents'
 import {
   createScript,
   generateCharacters,
@@ -19,31 +20,123 @@ import {
   updateScript,
 } from '../api/scripts'
 import type {
+  AgentSimple,
+  ProjectAgentConfig,
   ScriptDetail,
   ScriptCharacter,
   ScriptEpisode,
-  ScriptGenerationStage,
 } from '../api/types'
 
 const route = useRoute()
 const router = useRouter()
 const projectId = computed(() => Number(route.params.projectId))
 
-// ── 四步配置 ──────────────────────────────────────────────
+// ── 步骤配置 ──────────────────────────────────────────────
 const steps = [
+  { key: 'agents', label: '智能体配置', icon: Setting, desc: '选择总控与创作智能体' },
   { key: 'idea', label: '创意输入', icon: Notebook, desc: '描述你的短剧创意' },
   { key: 'outline', label: '故事大纲', icon: MagicStick, desc: '生成故事大纲与分集' },
   { key: 'characters', label: '人物设定', icon: User, desc: '设计主要人物档案' },
   { key: 'episodes', label: '逐集剧本', icon: VideoPlay, desc: '生成每集详细剧本' },
 ] as const
 
-const activeStep = ref<ScriptGenerationStage>('idea')
+type WizardStep = typeof steps[number]['key']
+const activeStep = ref<WizardStep>('agents')
 const script = ref<ScriptDetail | null>(null)
 const scriptId = ref<number | null>(null)
 const loading = ref(false)
 const generating = ref(false)
 
-// Step 1: 创意输入
+// ── Step 0: 智能体配置 ────────────────────────────────────
+const availableAgents = ref<AgentSimple[]>([])
+const projectAgents = ref<ProjectAgentConfig[]>([])
+const agentsLoading = ref(false)
+const directorAgentId = ref<number | null>(null)
+const enabledAgentIds = ref<number[]>([])
+const savingAgents = ref(false)
+
+async function loadAgentConfig() {
+  agentsLoading.value = true
+  try {
+    const [all, proj] = await Promise.all([
+      listAvailableAgents(),
+      listProjectAgents(projectId.value),
+    ])
+    availableAgents.value = all
+    projectAgents.value = proj
+    const enabled = proj.filter((a) => a.is_enabled)
+    enabledAgentIds.value = enabled.map((a) => a.agent_id)
+    const dir = proj.find((a) => a.is_director)
+    directorAgentId.value = dir?.agent_id || null
+  } catch (err) {
+    ElMessage.error(errorMessage(err))
+  } finally {
+    agentsLoading.value = false
+  }
+}
+
+function toggleAgent(id: number) {
+  const idx = enabledAgentIds.value.indexOf(id)
+  if (idx >= 0) {
+    enabledAgentIds.value.splice(idx, 1)
+  } else {
+    enabledAgentIds.value.push(id)
+  }
+}
+
+function isAgentEnabled(id: number) {
+  return enabledAgentIds.value.includes(id)
+}
+
+function setDirector(id: number) {
+  directorAgentId.value = id
+  // 总控自动启用
+  if (!isAgentEnabled(id)) {
+    enabledAgentIds.value.push(id)
+  }
+}
+
+const canProceedToIdea = computed(() => {
+  // 必须有总控智能体 + 至少启用 1 个创作/文字类智能体
+  if (!directorAgentId.value) return false
+  const creativeAgents = availableAgents.value.filter(
+    (a) => a.category === '文字' || a.category === '创作' || a.category === '视觉',
+  )
+  const hasCreative = creativeAgents.some((a) => isAgentEnabled(a.id))
+  return hasCreative
+})
+
+async function saveAgentConfigAndContinue() {
+  if (!directorAgentId.value) {
+    ElMessage.warning('请选择一个总控智能体')
+    return
+  }
+  if (!canProceedToIdea.value) {
+    ElMessage.warning('请至少启用一个创作类智能体')
+    return
+  }
+  savingAgents.value = true
+  try {
+    await setupProjectAgents(projectId.value, {
+      director_agent_id: directorAgentId.value,
+      enabled_agent_ids: enabledAgentIds.value,
+    })
+    ElMessage.success('智能体配置已保存')
+    activeStep.value = 'idea'
+  } catch (err) {
+    ElMessage.error(errorMessage(err))
+  } finally {
+    savingAgents.value = false
+  }
+}
+
+// 核心创作智能体（快速配置区域展示的）
+const coreAgentKeys = ['director', 'screenwriter', 'storyboard', 'character_designer', 'copywriter']
+const coreAgents = computed(() =>
+  availableAgents.value.filter((a) => coreAgentKeys.includes(a.agent_key)),
+)
+
+// ── Step 1: 创意输入 ───────────────────────────────────────────────
 const ideaForm = ref({
   idea: '',
   genre: '都市',
@@ -76,9 +169,12 @@ async function loadScript() {
       scriptId.value = res.items[0].id
       const detail = await getScript(scriptId.value)
       script.value = detail
-      activeStep.value = detail.generation_stage === 'completed'
-        ? 'episodes'
-        : detail.generation_stage
+      // 已进入创作阶段的，跳过智能体配置
+      if (detail.generation_stage !== 'idea') {
+        activeStep.value = detail.generation_stage === 'completed'
+          ? 'episodes'
+          : detail.generation_stage as WizardStep
+      }
       ideaForm.value = {
         idea: detail.core_idea || '',
         genre: detail.genre || '都市',
@@ -253,7 +349,10 @@ function goPrev() {
   }
 }
 
-onMounted(loadScript)
+onMounted(() => {
+  loadAgentConfig()
+  loadScript()
+})
 </script>
 
 <template>
@@ -265,38 +364,102 @@ onMounted(loadScript)
           v-for="(step, idx) in steps"
           :key="step.key"
           :title="step.label"
-          :description="step.desc"
           @click.native="goToStep(idx)"
         >
           <template #icon>
-            <el-icon :size="20"><component :is="step.icon" /></el-icon>
+            <el-icon :size="18"><component :is="step.icon" /></el-icon>
           </template>
         </el-step>
       </el-steps>
     </div>
 
+    <!-- Step 0: 智能体配置 -->
+    <div v-show="activeStep === 'agents'" class="wizard-content">
+      <div class="step-card">
+        <h3>配置智能体团队</h3>
+        <p class="step-tip">选择总控智能体和参与创作的子智能体，AI 将协同完成短剧制作</p>
+
+        <div class="agent-section" v-loading="agentsLoading">
+          <h4 class="section-title">总控智能体</h4>
+          <div class="agent-grid single">
+            <div
+              v-for="agent in availableAgents.filter(a => a.agent_key === 'director')"
+              :key="agent.id"
+              class="agent-select-card"
+              :class="{ selected: directorAgentId === agent.id }"
+              @click="setDirector(agent.id)"
+            >
+              <div class="agent-icon" :style="{ background: '#e6a23c' }">🎬</div>
+              <div class="agent-info">
+                <div class="agent-name">{{ agent.name }}</div>
+                <div class="agent-desc">{{ agent.description }}</div>
+              </div>
+              <el-radio :model-value="directorAgentId === agent.id" @click.stop="setDirector(agent.id)">
+                设为总控
+              </el-radio>
+            </div>
+          </div>
+
+          <h4 class="section-title">创作智能体</h4>
+          <div class="agent-grid">
+            <div
+              v-for="agent in coreAgents.filter(a => a.agent_key !== 'director')"
+              :key="agent.id"
+              class="agent-select-card"
+              :class="{ selected: isAgentEnabled(agent.id) }"
+              @click="toggleAgent(agent.id)"
+            >
+              <div class="agent-icon">
+                {{ agent.name?.[0] || '?' }}
+              </div>
+              <div class="agent-info">
+                <div class="agent-name">{{ agent.name }}</div>
+                <div class="agent-desc">{{ agent.description }}</div>
+              </div>
+              <el-checkbox :model-value="isAgentEnabled(agent.id)" @click.stop="toggleAgent(agent.id)" />
+            </div>
+          </div>
+        </div>
+
+        <div class="step-actions">
+          <el-button
+            type="primary"
+            :icon="Check"
+            :loading="savingAgents"
+            :disabled="!canProceedToIdea"
+            @click="saveAgentConfigAndContinue"
+          >
+            确认配置，开始创作
+          </el-button>
+        </div>
+        <div v-if="!canProceedToIdea && availableAgents.length" class="config-hint">
+          <el-icon><Setting /></el-icon>
+          请选择总控智能体并至少启用一个创作智能体
+        </div>
+      </div>
+    </div>
+
     <!-- Step 1: 创意输入 -->
     <div v-show="activeStep === 'idea'" class="wizard-content">
       <div class="step-card">
-        <h3>描述你的短剧创意</h3>
-        <p class="step-desc">告诉 AI 你想做什么样的短剧，它会帮你生成完整的故事大纲。</p>
+        <h3>创意输入</h3>
 
-        <el-form label-width="100px" class="idea-form">
-          <el-form-item label="创意描述" required>
+        <el-form label-width="80px" class="idea-form">
+          <el-form-item label="创意" required>
             <el-input
               v-model="ideaForm.idea"
               type="textarea"
-              :rows="5"
-              placeholder="例如：一个重生回到高中的女孩，决定改变命运，却意外发现了当年被掩盖的真相..."
+              :rows="3"
+              placeholder="描述你的短剧创意..."
               maxlength="500"
               show-word-limit
             />
           </el-form-item>
 
-          <el-row :gutter="16">
+          <el-row :gutter="12">
             <el-col :span="8">
               <el-form-item label="题材">
-                <el-select v-model="ideaForm.genre" style="width: 100%" placeholder="选择题材">
+                <el-select v-model="ideaForm.genre" style="width: 100%" placeholder="请选择">
                   <el-option v-for="g in genreOptions" :key="g" :label="g" :value="g" />
                 </el-select>
               </el-form-item>
@@ -318,42 +481,38 @@ onMounted(loadScript)
           <el-button
             type="primary"
             :icon="MagicStick"
-            size="large"
             :loading="generating"
             :disabled="ideaForm.idea.trim().length < 5"
             @click="generateOutlineStep"
           >
-            下一步：生成故事大纲
+            生成大纲
           </el-button>
         </div>
 
-        <el-divider>或</el-divider>
-
         <el-collapse v-model="importVisible" class="import-collapse">
-          <el-collapse-item name="import" title="📄 直接导入剧本 / 小说">
+          <el-collapse-item name="import" title="📄 导入剧本 / 小说">
             <p class="import-hint">
-              支持粘贴文本或上传文件，自动识别剧本格式，智能解析场景、角色和对白。
+              粘贴或上传文本，自动识别格式并解析场景、角色、对白
             </p>
 
             <div class="import-toolbar">
-              <el-radio-group v-model="importMode" size="default">
+              <el-radio-group v-model="importMode" size="small">
                 <el-radio-button value="text">粘贴文本</el-radio-button>
                 <el-radio-button value="file">上传文件</el-radio-button>
               </el-radio-group>
-
-              <el-select v-model="importType" style="width: 160px; margin-left: 12px">
+              <el-select v-model="importType" style="width: 140px; margin-left: 12px" size="default">
                 <el-option label="自动识别" value="auto" />
-                <el-option label="小说格式" value="novel" />
-                <el-option label="Fountain 剧本" value="fountain" />
+                <el-option label="小说" value="novel" />
+                <el-option label="Fountain" value="fountain" />
               </el-select>
             </div>
 
-            <div v-show="importMode === 'text'" style="margin-top: 16px">
+            <div v-show="importMode === 'text'" style="margin-top: 12px">
               <el-input
                 v-model="importText"
                 type="textarea"
-                :rows="10"
-                placeholder="粘贴小说或剧本内容...&#10;&#10;支持格式：&#10;• 小说：按章节自动分场景，引号内文字识别为对白&#10;• Fountain：标准剧本格式（INT./EXT. 场景标题 + 大写角色名 + 对白）"
+                :rows="6"
+                placeholder="粘贴小说或剧本内容..."
                 class="import-textarea"
               />
             </div>
@@ -383,7 +542,7 @@ onMounted(loadScript)
               <el-button
                 type="success"
                 :icon="Upload"
-                size="large"
+               
                 :loading="importing"
                 @click="doImport"
               >
@@ -405,8 +564,7 @@ onMounted(loadScript)
     <!-- Step 2: 故事大纲 -->
     <div v-show="activeStep === 'outline'" class="wizard-content">
       <div class="step-card">
-        <h3>故事大纲与分集梗概</h3>
-        <p class="step-desc">AI 为你生成了整体故事架构，你可以调整每一集的概要。</p>
+        <h3>故事大纲</h3>
 
         <div class="outline-meta" v-if="script">
           <el-tag type="primary">{{ script.genre }}</el-tag>
@@ -434,11 +592,11 @@ onMounted(loadScript)
         </div>
 
         <div class="step-actions">
-          <el-button :icon="ArrowLeft" size="large" @click="goPrev">上一步</el-button>
+          <el-button :icon="ArrowLeft" @click="goPrev">上一步</el-button>
           <el-button
             type="primary"
             :icon="MagicStick"
-            size="large"
+           
             :loading="generating"
             @click="generateCharactersStep"
           >
@@ -451,8 +609,7 @@ onMounted(loadScript)
     <!-- Step 3: 人物设定 -->
     <div v-show="activeStep === 'characters'" class="wizard-content">
       <div class="step-card">
-        <h3>主要人物档案</h3>
-        <p class="step-desc">以下是根据故事大纲生成的主要角色，你可以编辑调整。</p>
+        <h3>人物设定</h3>
 
         <div class="character-grid">
           <div class="character-card" v-for="char in characters" :key="char.id">
@@ -479,11 +636,11 @@ onMounted(loadScript)
         </div>
 
         <div class="step-actions">
-          <el-button :icon="ArrowLeft" size="large" @click="goPrev">上一步</el-button>
+          <el-button :icon="ArrowLeft" @click="goPrev">上一步</el-button>
           <el-button
             type="primary"
             :icon="VideoPlay"
-            size="large"
+           
             :disabled="characters.length === 0"
             @click="goToEpisodes"
           >
@@ -496,8 +653,7 @@ onMounted(loadScript)
     <!-- Step 4: 逐集剧本 -->
     <div v-show="activeStep === 'episodes'" class="wizard-content">
       <div class="step-card">
-        <h3>逐集剧本制作</h3>
-        <p class="step-desc">选择一集开始详细剧本创作，进入专业编辑器进行精修。</p>
+        <h3>逐集剧本</h3>
 
         <div class="episode-grid">
           <div
@@ -523,11 +679,11 @@ onMounted(loadScript)
         </div>
 
         <div class="step-actions">
-          <el-button :icon="ArrowLeft" size="large" @click="goPrev">上一步</el-button>
+          <el-button :icon="ArrowLeft" @click="goPrev">上一步</el-button>
           <el-button
             type="primary"
             :icon="VideoPlay"
-            size="large"
+           
             @click="$router.push(`/projects/${projectId}/script`)"
           >
             打开剧本编辑器
@@ -540,13 +696,13 @@ onMounted(loadScript)
 
 <style scoped>
 .script-wizard {
-  padding: 20px 24px;
-  min-height: 500px;
+  padding: 12px 24px 20px 24px;
+  min-height: 400px;
 }
 
 .wizard-steps {
-  margin-bottom: 24px;
-  padding: 20px 40px;
+  margin-bottom: 16px;
+  padding: 12px 40px 4px 40px;
   background: var(--el-bg-color);
   border-radius: 8px;
   border: 1px solid var(--el-border-color-lighter);
@@ -562,24 +718,114 @@ onMounted(loadScript)
 }
 
 .step-card {
-  max-width: 900px;
+  max-width: 850px;
   margin: 0 auto;
   background: var(--el-bg-color);
   border-radius: 8px;
-  padding: 32px 40px;
+  padding: 20px 28px;
   border: 1px solid var(--el-border-color-lighter);
 }
 
 .step-card h3 {
-  margin: 0 0 8px 0;
-  font-size: 20px;
+  margin: 0 0 12px 0;
+  font-size: 17px;
   font-weight: 600;
 }
 
-.step-desc {
-  margin: 0 0 24px 0;
+.step-tip {
+  margin: 0 0 20px 0;
+  font-size: 13px;
   color: var(--el-text-color-secondary);
+}
+
+.config-hint {
+  text-align: center;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--el-text-color-placeholder);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.agent-section {
+  margin-bottom: 16px;
+}
+
+.section-title {
+  margin: 20px 0 10px 0;
   font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.agent-grid.single {
+  grid-template-columns: 1fr;
+}
+
+.agent-select-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--el-bg-color);
+}
+
+.agent-select-card:hover {
+  border-color: var(--el-color-primary-light-5);
+  background: var(--el-color-primary-light-9);
+}
+
+.agent-select-card.selected {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+
+.agent-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--el-color-primary-light-8);
+  color: var(--el-color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.agent-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-info .agent-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 2px;
+}
+
+.agent-info .agent-desc {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .idea-form {
@@ -589,14 +835,14 @@ onMounted(loadScript)
 .outline-meta {
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .synopsis-box {
   background: var(--el-fill-color-light);
-  padding: 16px;
+  padding: 12px 16px;
   border-radius: 6px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .synopsis-label {
@@ -794,8 +1040,9 @@ onMounted(loadScript)
 .step-actions {
   display: flex;
   justify-content: center;
-  gap: 16px;
-  padding-top: 16px;
+  gap: 12px;
+  padding-top: 12px;
+  margin-top: 8px;
   border-top: 1px solid var(--el-border-color-lighter);
 }
 
