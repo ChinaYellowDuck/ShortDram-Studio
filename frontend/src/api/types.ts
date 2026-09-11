@@ -543,6 +543,57 @@ export interface ReorderRequest {
   shot_ids: number[]
 }
 
+// ── Project Agent Config types ──────────────────────────────────────────
+
+export interface AgentSimple {
+  id: number
+  agent_key: string
+  name: string
+  description: string | null
+  agent_type: string
+  category: string | null
+  is_enabled: boolean
+  temperature: number
+  version: string
+}
+
+export interface ProjectAgentConfig {
+  id: number
+  project_id: number
+  agent_id: number
+  is_enabled: boolean
+  is_director: boolean
+  llm_config_id: number | null
+  params_override: Record<string, unknown> | null
+  temperature: number | null
+  system_message_override: string | null
+  priority: number
+  role_description: string | null
+  created_at: string
+  updated_at: string
+  agent_key: string | null
+  agent_name: string | null
+  agent_description: string | null
+  agent_type: string | null
+  agent_category: string | null
+}
+
+export interface ProjectAgentSetupRequest {
+  director_agent_id: number
+  enabled_agent_ids: number[]
+}
+
+export interface ProjectAgentConfigUpdate {
+  is_enabled?: boolean
+  is_director?: boolean
+  llm_config_id?: number | null
+  params_override?: Record<string, unknown> | null
+  temperature?: number | null
+  system_message_override?: string | null
+  priority?: number
+  role_description?: string | null
+}
+
 // ── Script Episode types ────────────────────────────────────────────────────
 
 export interface ScriptEpisode {

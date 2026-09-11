@@ -4,6 +4,7 @@ from app.models.base import Base
 from app.models.llm_config import LLMConfig
 from app.models.mcp import Mcp
 from app.models.project import Project
+from app.models.project_agent import ProjectAgentConfig
 from app.models.skill import Skill
 from app.models.script import (
     CharacterType,

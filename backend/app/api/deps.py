@@ -12,6 +12,7 @@ from app.services.mcp_service import McpService
 from app.services.project_service import ProjectService
 from app.services.script_service import ScriptService
 from app.services.skill_service import SkillService
+from app.services.project_agent_service import ProjectAgentService
 from app.services.storyboard_service import StoryboardService
 
 DBSession = Annotated[Session, Depends(get_db)]
@@ -93,5 +94,11 @@ def get_storyboard_service(db: DBSession) -> StoryboardService:
     return StoryboardService(db)
 
 
+def get_project_agent_service(db: DBSession) -> ProjectAgentService:
+    """Dependency for ProjectAgentService."""
+    return ProjectAgentService(db)
+
+
 AssetServiceDep = Annotated[AssetService, Depends(get_asset_service)]
 StoryboardServiceDep = Annotated[StoryboardService, Depends(get_storyboard_service)]
+ProjectAgentServiceDep = Annotated[ProjectAgentService, Depends(get_project_agent_service)]

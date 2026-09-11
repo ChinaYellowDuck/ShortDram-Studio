@@ -21,6 +21,7 @@ import {
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ScriptWizardView from './ScriptWizardView.vue'
+import ProjectAgentsView from './ProjectAgentsView.vue'
 
 import { errorMessage } from '../api/client'
 import {
@@ -61,7 +62,7 @@ const phaseSteps: { key: ProjectPhase; label: string; icon: any; desc: string }[
 ]
 
 // ── 状态 ───────────────────────────────────────────────────
-const activeModule = ref<'script' | 'asset' | 'storyboard' | 'video'>('script')
+const activeModule = ref<'script' | 'asset' | 'storyboard' | 'video' | 'agents'>('script')
 const projectPhase = ref<ProjectPhase>('script')
 const projectName = ref('')
 const transitioning = ref(false)
@@ -542,6 +543,11 @@ function handleTabChange(tabName: string) {
             <p>半自动化分步模式：片段生成 → 配音 → 最终合成，每步可预览调整</p>
             <el-alert title="即将上线" type="info" :closable="false" style="max-width: 400px" />
           </div>
+        </el-tab-pane>
+
+        <!-- 智能体配置 -->
+        <el-tab-pane label="智能体" name="agents">
+          <ProjectAgentsView />
         </el-tab-pane>
       </el-tabs>
     </el-card>

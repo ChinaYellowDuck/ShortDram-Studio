@@ -8,6 +8,7 @@ from app.api.v1 import assets as assets_router
 from app.api.v1 import health as health_router
 from app.api.v1 import llm_configs as llm_configs_router
 from app.api.v1 import mcps as mcps_router
+from app.api.v1 import project_agents as project_agents_router
 from app.api.v1 import projects as projects_router
 from app.api.v1 import scripts as scripts_router
 from app.api.v1 import skills as skills_router
@@ -26,4 +27,5 @@ api_router.include_router(storyboard_router.router, prefix="/storyboard", tags=[
 api_router.include_router(scripts_router.router, prefix="/scripts", tags=["剧本管理"])
 api_router.include_router(agents_meta_router.router, prefix="/agents/meta", tags=["智能体管理"])
 api_router.include_router(agent_runs_router.router, prefix="/agent-runs", tags=["智能体运行记录"])
+api_router.include_router(project_agents_router.router, prefix="", tags=["项目智能体配置"])
 api_router.include_router(agents_router.router, prefix="/agents", tags=["智能体"])
