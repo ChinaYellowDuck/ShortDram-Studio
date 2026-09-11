@@ -106,7 +106,10 @@ export interface Mcp {
   name: string
   url: string
   transport: string
+  mcp_type: string
   config: Record<string, unknown> | null
+  secrets: Record<string, unknown> | null
+  tools: Array<Record<string, unknown>> | null
   description: string | null
   is_enabled: boolean
   created_at: string
@@ -117,9 +120,30 @@ export interface McpCreate {
   name: string
   url: string
   transport?: string
+  mcp_type?: string
   config?: Record<string, unknown> | null
+  secrets?: Record<string, unknown> | null
   description?: string | null
   is_enabled?: boolean
+}
+
+export interface McpUpdate {
+  name?: string
+  url?: string
+  transport?: string
+  mcp_type?: string
+  config?: Record<string, unknown> | null
+  secrets?: Record<string, unknown> | null
+  description?: string | null
+  is_enabled?: boolean
+}
+
+export interface McpTestResult {
+  ok: boolean
+  error?: string
+  tools?: Array<Record<string, unknown>>
+  server_version?: string
+  latency_ms?: number
 }
 
 export interface Skill {
