@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Delete, Edit, Plus, Search } from '@element-plus/icons-vue'
+import { Delete, Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -34,6 +34,14 @@ const statusMeta: Record<ProjectStatus, { label: string; type: 'info' | 'primary
   in_progress: { label: '制作中', type: 'primary' },
   completed: { label: '已完成', type: 'success' },
   archived: { label: '已归档', type: 'warning' },
+}
+
+const phaseLabel: Record<string, string> = {
+  script: '剧本阶段',
+  asset: '资产阶段',
+  storyboard: '分镜阶段',
+  video: '视频阶段',
+  completed: '已完成',
 }
 
 async function load() {
@@ -92,7 +100,7 @@ async function remove(project: Project) {
 }
 
 function openEditor(project: Project) {
-  router.push(`/projects/${project.id}/script`)
+  router.push(`/projects/${project.id}/workspace`)
 }
 
 function formatTime(value: string): string {
@@ -130,6 +138,11 @@ onMounted(load)
         <el-table-column prop="description" label="描述" min-width="240" show-overflow-tooltip>
           <template #default="{ row }">{{ row.description || '-' }}</template>
         </el-table-column>
+        <el-table-column label="阶段" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" type="info">{{ phaseLabel[row.phase] }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="statusMeta[row.status as ProjectStatus].type" size="small">
@@ -140,10 +153,10 @@ onMounted(load)
         <el-table-column label="创建时间" width="180">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="150">
+        <el-table-column label="操作" width="180">
           <template #default="{ row }">
-            <el-button type="primary" link :icon="Edit" @click="openEditor(row)">
-              编辑剧本
+            <el-button type="primary" link @click="openEditor(row)">
+              进入工作台
             </el-button>
             <el-button type="danger" link :icon="Delete" @click="remove(row)">
               删除

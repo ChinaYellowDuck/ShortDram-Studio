@@ -22,6 +22,12 @@ const router = createRouter({
       meta: { title: '剧本编辑器', hiddenSidebar: true },
     },
     {
+      path: '/projects/:projectId/workspace',
+      name: 'project-workspace',
+      component: () => import('../views/ProjectWorkspaceView.vue'),
+      meta: { title: '项目工作台', hiddenSidebar: true },
+    },
+    {
       path: '/llm-configs',
       name: 'llm-configs',
       component: () => import('../views/LlmConfigsView.vue'),
