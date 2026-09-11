@@ -16,6 +16,19 @@ class ProjectStatus(str, enum.Enum):
     ARCHIVED = "archived"
 
 
+class ProjectPhase(str, enum.Enum):
+    """Project production phase (linear workflow).
+
+    Five phases: script → asset → storyboard → video → completed.
+    """
+
+    SCRIPT = "script"
+    ASSET = "asset"
+    STORYBOARD = "storyboard"
+    VIDEO = "video"
+    COMPLETED = "completed"
+
+
 class Project(BaseModel):
     """Short drama project model.
 
@@ -36,6 +49,11 @@ class Project(BaseModel):
     status: Mapped[ProjectStatus] = mapped_column(
         Enum(ProjectStatus, values_callable=lambda x: [e.value for e in x]),
         default=ProjectStatus.DRAFT,
+        index=True,
+    )
+    phase: Mapped[ProjectPhase] = mapped_column(
+        Enum(ProjectPhase, values_callable=lambda x: [e.value for e in x]),
+        default=ProjectPhase.SCRIPT,
         index=True,
     )
     cover_image: Mapped[str | None] = mapped_column(String(500), nullable=True)
