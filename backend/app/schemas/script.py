@@ -4,7 +4,13 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from app.models.script import CharacterType, Emotion, IntExt, TimeOfDay
+from app.models.script import (
+    CharacterType,
+    Emotion,
+    IntExt,
+    ScriptGenerationStage,
+    TimeOfDay,
+)
 
 
 # ── Character ────────────────────────────────────────────────────────────────
@@ -154,6 +160,11 @@ class ScriptBase(BaseModel):
     total_episodes: int = Field(default=1, ge=1, description="总集数")
     synopsis: Optional[str] = Field(None, description="故事大纲")
     version: str = Field(default="v0.1", max_length=50, description="版本")
+    generation_stage: ScriptGenerationStage = Field(
+        default=ScriptGenerationStage.IDEA, description="生成阶段"
+    )
+    episode_outlines: Optional[list[dict]] = Field(None, description="分集大纲列表")
+    core_idea: Optional[str] = Field(None, description="核心创意输入")
 
 
 class ScriptCreate(ScriptBase):
@@ -172,6 +183,9 @@ class ScriptUpdate(BaseModel):
     total_episodes: Optional[int] = None
     synopsis: Optional[str] = None
     version: Optional[str] = None
+    generation_stage: Optional[ScriptGenerationStage] = None
+    episode_outlines: Optional[list[dict]] = None
+    core_idea: Optional[str] = None
 
 
 class ScriptResponse(ScriptBase):
@@ -192,6 +206,7 @@ class ScriptDetailResponse(ScriptBase):
     project_id: int
     scenes: list[ScriptSceneResponse] = []
     characters: list[ScriptCharacterResponse] = []
+    episodes: list["ScriptEpisodeResponse"] = []
     created_at: datetime
     updated_at: datetime
 
@@ -226,3 +241,70 @@ class ScriptFountainExport(BaseModel):
     title: str
     content: str
     format: str = "fountain"
+
+
+# ── Episode ──────────────────────────────────────────────────────────────────
+
+class ScriptEpisodeBase(BaseModel):
+    """Base schema for a script episode."""
+
+    episode_number: int = Field(..., ge=1, description="集数")
+    title: Optional[str] = Field(None, max_length=200, description="分集标题")
+    synopsis: Optional[str] = Field(None, description="分集梗概")
+    duration_seconds: Optional[int] = Field(None, description="预估时长(秒)")
+    is_generated: bool = Field(default=False, description="是否已生成完整剧本")
+    order_index: int = Field(default=0, description="排序")
+
+
+class ScriptEpisodeCreate(ScriptEpisodeBase):
+    """Schema for creating an episode."""
+
+    pass
+
+
+class ScriptEpisodeUpdate(BaseModel):
+    """Schema for updating an episode."""
+
+    episode_number: Optional[int] = None
+    title: Optional[str] = None
+    synopsis: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    is_generated: Optional[bool] = None
+    order_index: Optional[int] = None
+
+
+class ScriptEpisodeResponse(ScriptEpisodeBase):
+    """Schema for episode response."""
+
+    id: int
+    script_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Wizard / Generation Requests ────────────────────────────────────────────
+
+class OutlineGenerateRequest(BaseModel):
+    """Request for generating story outline."""
+
+    idea: str = Field(..., min_length=5, description="创意描述")
+    genre: str = Field(default="都市", max_length=50, description="题材")
+    style: Optional[str] = Field(None, max_length=100, description="风格")
+    total_episodes: int = Field(default=24, ge=1, le=200, description="总集数")
+    llm_config_id: Optional[int] = None
+
+
+class CharactersGenerateRequest(BaseModel):
+    """Request for generating characters from outline."""
+
+    num_characters: int = Field(default=5, ge=2, le=30, description="角色数量")
+    llm_config_id: Optional[int] = None
+
+
+class EpisodeGenerateRequest(BaseModel):
+    """Request for generating a single episode script."""
+
+    episode_number: int = Field(..., ge=1, description="第几集")
+    llm_config_id: Optional[int] = None

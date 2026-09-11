@@ -7,6 +7,8 @@ from fastapi import APIRouter, Query, status
 from app.api.deps import ScriptServiceDep
 from app.schemas.common import PaginatedResponse
 from app.schemas.script import (
+    CharactersGenerateRequest,
+    OutlineGenerateRequest,
     ScriptCharacterCreate,
     ScriptCharacterResponse,
     ScriptCharacterUpdate,
@@ -15,6 +17,9 @@ from app.schemas.script import (
     ScriptDialogueCreate,
     ScriptDialogueResponse,
     ScriptDialogueUpdate,
+    ScriptEpisodeCreate,
+    ScriptEpisodeResponse,
+    ScriptEpisodeUpdate,
     ScriptFountainExport,
     ScriptResponse,
     ScriptSceneCreate,
@@ -269,3 +274,109 @@ def update_dialogue(
 def delete_dialogue(dialogue_id: int, service: ScriptServiceDep):
     """Delete a dialogue line."""
     service.delete_dialogue(dialogue_id)
+
+
+# ── Episode Endpoints ────────────────────────────────────────────────────────
+
+
+@router.get("/{script_id}/episodes", response_model=list[ScriptEpisodeResponse], summary="获取分集列表")
+def list_episodes(script_id: int, service: ScriptServiceDep):
+    """List all episodes of a script."""
+    return service.list_episodes(script_id)
+
+
+@router.post(
+    "/{script_id}/episodes",
+    response_model=ScriptEpisodeResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="创建分集",
+)
+def create_episode(
+    script_id: int, data: ScriptEpisodeCreate, service: ScriptServiceDep
+):
+    """Create a new episode."""
+    return service.create_episode(script_id, data)
+
+
+@router.get(
+    "/episodes/{episode_id}", response_model=ScriptEpisodeResponse, summary="获取分集详情"
+)
+def get_episode(episode_id: int, service: ScriptServiceDep):
+    """Get an episode by ID."""
+    return service.get_episode_or_404(episode_id)
+
+
+@router.put(
+    "/episodes/{episode_id}", response_model=ScriptEpisodeResponse, summary="更新分集"
+)
+def update_episode(
+    episode_id: int, data: ScriptEpisodeUpdate, service: ScriptServiceDep
+):
+    """Update an episode."""
+    return service.update_episode(episode_id, data)
+
+
+@router.delete(
+    "/episodes/{episode_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="删除分集",
+)
+def delete_episode(episode_id: int, service: ScriptServiceDep):
+    """Delete an episode."""
+    service.delete_episode(episode_id)
+
+
+# ── Wizard / Generation Endpoints ───────────────────────────────────────────
+
+
+@router.post(
+    "/{script_id}/outline/generate",
+    response_model=ScriptDetailResponse,
+    summary="生成故事大纲",
+)
+def generate_outline(
+    script_id: int, data: OutlineGenerateRequest, service: ScriptServiceDep
+):
+    """Generate story outline and episode outlines."""
+    script, _ = service.generate_outline(
+        script_id=script_id,
+        idea=data.idea,
+        genre=data.genre,
+        style=data.style,
+        total_episodes=data.total_episodes,
+    )
+    return script
+
+
+@router.post(
+    "/{script_id}/characters/generate",
+    response_model=list[ScriptCharacterResponse],
+    summary="生成人物设定",
+)
+def generate_characters(
+    script_id: int, data: CharactersGenerateRequest, service: ScriptServiceDep
+):
+    """Generate characters based on the story outline."""
+    return service.generate_characters(script_id, data.num_characters)
+
+
+@router.post(
+    "/{script_id}/episodes/{episode_number}/generate",
+    response_model=ScriptEpisodeResponse,
+    summary="生成分集剧本",
+)
+def generate_episode_script(
+    script_id: int, episode_number: int, service: ScriptServiceDep
+):
+    """Generate full script for a specific episode."""
+    # Placeholder: actual generation via agent layer
+    episodes = service.list_episodes(script_id)
+    for ep in episodes:
+        if ep.episode_number == episode_number:
+            return service.mark_episode_generated(ep.id)
+    # If not found, create it
+    ep = service.create_episode(
+        script_id,
+        ScriptEpisodeCreate(episode_number=episode_number, is_generated=True),
+    )
+    return ep

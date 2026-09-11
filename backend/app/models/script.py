@@ -5,7 +5,7 @@ A script belongs to a project and contains multiple scenes, characters, and dial
 """
 import enum
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
@@ -56,6 +56,16 @@ class Emotion(str, enum.Enum):
     TENDER = "温柔"
 
 
+class ScriptGenerationStage(str, enum.Enum):
+    """Generation progress of a script (wizard steps)."""
+
+    IDEA = "idea"  # 创意输入
+    OUTLINE = "outline"  # 大纲完成
+    CHARACTERS = "characters"  # 人物设定完成
+    EPISODES = "episodes"  # 分集剧本生成中
+    COMPLETED = "completed"  # 全部完成
+
+
 class Script(BaseModel):
     """Short drama script model.
 
@@ -85,6 +95,14 @@ class Script(BaseModel):
     total_episodes: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     synopsis: Mapped[str | None] = mapped_column(Text, nullable=True)
     version: Mapped[str] = mapped_column(String(50), default="v0.1", nullable=False)
+    generation_stage: Mapped[ScriptGenerationStage] = mapped_column(
+        Enum(ScriptGenerationStage, values_callable=lambda x: [e.value for e in x]),
+        default=ScriptGenerationStage.IDEA,
+        nullable=False,
+        index=True,
+    )
+    episode_outlines: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    core_idea: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
     scenes: Mapped[list["ScriptScene"]] = relationship(
@@ -97,6 +115,12 @@ class Script(BaseModel):
         "ScriptCharacter",
         back_populates="script",
         cascade="all, delete-orphan",
+    )
+    episodes: Mapped[list["ScriptEpisode"]] = relationship(
+        "ScriptEpisode",
+        back_populates="script",
+        cascade="all, delete-orphan",
+        order_by="ScriptEpisode.order_index",
     )
 
     def __repr__(self) -> str:
@@ -225,3 +249,34 @@ class ScriptDialogue(BaseModel):
             f"<ScriptDialogue(id={self.id}, character='{self.character_name}', "
             f"scene_id={self.scene_id})>"
         )
+
+
+class ScriptEpisode(BaseModel):
+    """A single episode in a multi-episode short drama script.
+
+    Attributes:
+        script_id: Parent script ID.
+        episode_number: Episode number (1-based).
+        title: Episode title.
+        synopsis: Episode-level synopsis / teaser.
+        duration_seconds: Estimated episode duration.
+        is_generated: Whether full episode script is generated.
+        order_index: Sort order.
+    """
+
+    __tablename__ = "script_episodes"
+
+    script_id: Mapped[int] = mapped_column(
+        ForeignKey("scripts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    episode_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    synopsis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_generated: Mapped[bool] = mapped_column(Integer, default=0, nullable=False)
+    order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False, index=True)
+
+    script: Mapped[Script] = relationship("Script", back_populates="episodes")
+
+    def __repr__(self) -> str:
+        return f"<ScriptEpisode(script={self.script_id}, ep={self.episode_number})>"

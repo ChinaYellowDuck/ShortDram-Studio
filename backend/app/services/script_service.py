@@ -12,6 +12,8 @@ from app.models.script import (
     Script,
     ScriptCharacter,
     ScriptDialogue,
+    ScriptEpisode,
+    ScriptGenerationStage,
     ScriptScene,
 )
 from app.schemas.script import (
@@ -20,6 +22,8 @@ from app.schemas.script import (
     ScriptCreate,
     ScriptDialogueCreate,
     ScriptDialogueUpdate,
+    ScriptEpisodeCreate,
+    ScriptEpisodeUpdate,
     ScriptSceneCreate,
     ScriptSceneUpdate,
     ScriptUpdate,
@@ -410,3 +414,162 @@ class ScriptService:
             lines.append("")
 
         return "\n".join(lines)
+
+    # ── Episode Management ─────────────────────────────────────────────────
+
+    def list_episodes(self, script_id: int) -> List[ScriptEpisode]:
+        """List all episodes of a script."""
+        return (
+            self.db.query(ScriptEpisode)
+            .filter(ScriptEpisode.script_id == script_id)
+            .order_by(ScriptEpisode.order_index.asc())
+            .all()
+        )
+
+    def get_episode(self, episode_id: int) -> Optional[ScriptEpisode]:
+        return self.db.query(ScriptEpisode).filter(ScriptEpisode.id == episode_id).first()
+
+    def get_episode_or_404(self, episode_id: int) -> ScriptEpisode:
+        ep = self.get_episode(episode_id)
+        if not ep:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Episode with id {episode_id} not found",
+            )
+        return ep
+
+    def create_episode(self, script_id: int, data: ScriptEpisodeCreate) -> ScriptEpisode:
+        """Create a new episode."""
+        ep = ScriptEpisode(script_id=script_id, **data.model_dump())
+        self.db.add(ep)
+        self.db.commit()
+        self.db.refresh(ep)
+        return ep
+
+    def update_episode(self, episode_id: int, data: ScriptEpisodeUpdate) -> ScriptEpisode:
+        """Update an episode."""
+        ep = self.get_episode_or_404(episode_id)
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(ep, field, value)
+        self.db.commit()
+        self.db.refresh(ep)
+        return ep
+
+    def delete_episode(self, episode_id: int) -> None:
+        ep = self.get_episode_or_404(episode_id)
+        self.db.delete(ep)
+        self.db.commit()
+
+    # ── Generation Stage Management ────────────────────────────────────────
+
+    def set_generation_stage(self, script_id: int, stage: ScriptGenerationStage) -> Script:
+        """Update the generation stage of a script."""
+        script = self.get_by_id_or_404(script_id)
+        script.generation_stage = stage
+        self.db.commit()
+        self.db.refresh(script)
+        return script
+
+    def advance_generation_stage(self, script_id: int, target: ScriptGenerationStage) -> Script:
+        """Advance script generation to target stage (can't go backward)."""
+        script = self.get_by_id_or_404(script_id)
+        stages = list(ScriptGenerationStage)
+        current_idx = stages.index(script.generation_stage)
+        target_idx = stages.index(target)
+        if target_idx > current_idx:
+            script.generation_stage = target
+            self.db.commit()
+            self.db.refresh(script)
+        return script
+
+    def generate_outline(
+        self,
+        script_id: int,
+        idea: str,
+        genre: str,
+        style: Optional[str],
+        total_episodes: int,
+    ) -> Tuple[Script, List[dict]]:
+        """Generate story outline and episode outlines.
+
+        Note: Actual AI generation is handled by the agent layer.
+        This method sets up the script data structure for generation.
+        """
+        script = self.get_by_id_or_404(script_id)
+        script.core_idea = idea
+        script.genre = genre
+        script.style = style
+        script.total_episodes = total_episodes
+
+        # Create placeholder episode outlines
+        outlines = []
+        for i in range(total_episodes):
+            outlines.append({
+                "episode_number": i + 1,
+                "title": f"第{i + 1}集",
+                "synopsis": "",  # Will be filled by AI
+                "hook": "",
+                "cliffhanger": "",
+            })
+
+        script.episode_outlines = outlines
+        script.generation_stage = ScriptGenerationStage.OUTLINE
+
+        # Create episode records
+        for i in range(total_episodes):
+            ep = ScriptEpisode(
+                script_id=script.id,
+                episode_number=i + 1,
+                title=f"第{i + 1}集",
+                order_index=i,
+                is_generated=False,
+            )
+            self.db.add(ep)
+
+        self.db.commit()
+        self.db.refresh(script)
+        return script, outlines
+
+    def generate_characters(
+        self,
+        script_id: int,
+        num_characters: int = 5,
+    ) -> List[ScriptCharacter]:
+        """Generate characters for the script.
+
+        Note: Actual AI generation handled by agent layer.
+        This method advances the stage and returns current characters.
+        """
+        script = self.get_by_id_or_404(script_id)
+
+        # If no characters exist yet, create placeholders
+        existing = self.list_characters(script_id)
+        if not existing:
+            for i in range(num_characters):
+                self.create_character(script_id, ScriptCharacterCreate(
+                    name=f"角色{i + 1}",
+                    character_type="主角" if i == 0 else "配角",
+                ))
+
+        script.generation_stage = ScriptGenerationStage.CHARACTERS
+        self.db.commit()
+        return self.list_characters(script_id)
+
+    def mark_episode_generated(self, episode_id: int) -> ScriptEpisode:
+        """Mark an episode as fully generated."""
+        ep = self.get_episode_or_404(episode_id)
+        ep.is_generated = True
+        self.db.commit()
+        self.db.refresh(ep)
+
+        # Check if all episodes are generated → advance stage
+        all_generated = all(
+            e.is_generated for e in self.list_episodes(ep.script_id)
+        )
+        if all_generated:
+            script = self.get_by_id(ep.script_id)
+            if script:
+                script.generation_stage = ScriptGenerationStage.COMPLETED
+                self.db.commit()
+
+        return ep
