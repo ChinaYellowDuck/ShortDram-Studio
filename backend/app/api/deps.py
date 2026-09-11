@@ -6,11 +6,13 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.services.agent_service import AgentService
+from app.services.asset_service import AssetService
 from app.services.llm_config_service import LLMConfigService
 from app.services.mcp_service import McpService
 from app.services.project_service import ProjectService
 from app.services.script_service import ScriptService
 from app.services.skill_service import SkillService
+from app.services.storyboard_service import StoryboardService
 
 DBSession = Annotated[Session, Depends(get_db)]
 
@@ -79,3 +81,17 @@ ScriptServiceDep = Annotated[ScriptService, Depends(get_script_service)]
 AgentServiceDep = Annotated[AgentService, Depends(get_agent_service)]
 McpServiceDep = Annotated[McpService, Depends(get_mcp_service)]
 SkillServiceDep = Annotated[SkillService, Depends(get_skill_service)]
+
+
+def get_asset_service(db: DBSession) -> AssetService:
+    """Dependency for AssetService."""
+    return AssetService(db)
+
+
+def get_storyboard_service(db: DBSession) -> StoryboardService:
+    """Dependency for StoryboardService."""
+    return StoryboardService(db)
+
+
+AssetServiceDep = Annotated[AssetService, Depends(get_asset_service)]
+StoryboardServiceDep = Annotated[StoryboardService, Depends(get_storyboard_service)]
