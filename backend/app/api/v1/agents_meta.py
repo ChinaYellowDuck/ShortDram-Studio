@@ -92,3 +92,26 @@ def list_agent_mcp_tools(service: AgentServiceDep, agent_id: int):
         "tools": tools,
         "total": len(tools),
     }
+
+
+@router.post("/{agent_id}/test-tool-call", summary="测试工具调用")
+def test_agent_tool_call(
+    service: AgentServiceDep,
+    agent_id: int,
+    data: dict,
+):
+    """Test tool calling with a sample prompt.
+
+    Sends a test message to the agent and returns the full conversation
+    including any tool calls made. Useful for verifying MCP tool integration.
+
+    - **prompt**: 测试提示词
+    """
+    prompt = data.get("prompt", "")
+    if not prompt:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail="prompt 不能为空")
+
+    result = service.test_tool_call(agent_id, prompt)
+    return result

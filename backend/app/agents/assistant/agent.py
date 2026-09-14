@@ -14,10 +14,11 @@ Usage:
     result = agent.rewrite(text, style="formal")
     result = agent.brainstorm(topic, num_ideas=10)
 """
+import re
 from typing import Any, Dict, List, Optional
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph
 from loguru import logger
 
@@ -99,11 +100,16 @@ class AssistantAgent(BaseAgent):
 {text}
 
 请直接输出摘要内容，不要加前缀或解释。"""
-        response = self.llm.invoke([
-            SystemMessage(content=ASSISTANT_SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
-        ])
-        return {"summary": response.content.strip(), "original_length": len(text)}
+        result = self.invoke_with_tools(
+            [HumanMessage(content=prompt)],
+            system_prompt=ASSISTANT_SYSTEM_PROMPT,
+        )
+        return {
+            "summary": result["content"].strip(),
+            "original_length": len(text),
+            "tool_calls": result["tool_calls"],
+            "tools_used": result["tools_used"],
+        }
 
     def rewrite(
         self,
@@ -120,11 +126,17 @@ class AssistantAgent(BaseAgent):
 {text}
 
 请直接输出改写后的内容。"""
-        response = self.llm.invoke([
-            SystemMessage(content=ASSISTANT_SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
-        ])
-        return {"rewritten": response.content.strip(), "original": text, "style": style}
+        result = self.invoke_with_tools(
+            [HumanMessage(content=prompt)],
+            system_prompt=ASSISTANT_SYSTEM_PROMPT,
+        )
+        return {
+            "rewritten": result["content"].strip(),
+            "original": text,
+            "style": style,
+            "tool_calls": result["tool_calls"],
+            "tools_used": result["tools_used"],
+        }
 
     def brainstorm(self, topic: str, num_ideas: int = 10, **kwargs) -> Dict[str, Any]:
         """Brainstorm ideas on a given topic."""
@@ -137,23 +149,28 @@ class AssistantAgent(BaseAgent):
 • 要有一定的想象力和可行性
 
 请用编号列表输出。"""
-        response = self.llm.invoke([
-            SystemMessage(content=ASSISTANT_SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
-        ])
+        result = self.invoke_with_tools(
+            [HumanMessage(content=prompt)],
+            system_prompt=ASSISTANT_SYSTEM_PROMPT,
+        )
+        raw = result["content"].strip()
         # Parse numbered list into array
-        raw = response.content.strip()
         ideas = []
         for line in raw.split("\n"):
             line = line.strip()
             if not line:
                 continue
             # Remove number prefix like "1. " or "1、"
-            import re
             cleaned = re.sub(r"^\d+[\.\、\)]\s*", "", line)
             if cleaned:
                 ideas.append(cleaned)
-        return {"topic": topic, "ideas": ideas[:num_ideas], "raw": raw}
+        return {
+            "topic": topic,
+            "ideas": ideas[:num_ideas],
+            "raw": raw,
+            "tool_calls": result["tool_calls"],
+            "tools_used": result["tools_used"],
+        }
 
     def classify(self, text: str, categories: Optional[List[str]] = None, **kwargs) -> Dict[str, Any]:
         """Classify text into categories."""
@@ -164,16 +181,28 @@ class AssistantAgent(BaseAgent):
 {text}
 
 请用 JSON 格式输出：{{"categories": ["标签1", "标签2"]}}"""
-        response = self.llm.invoke([
-            SystemMessage(content=ASSISTANT_SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
-        ])
+        result = self.invoke_with_tools(
+            [HumanMessage(content=prompt)],
+            system_prompt=ASSISTANT_SYSTEM_PROMPT,
+        )
+        content = result["content"]
         import json as _json
         try:
-            parsed = _json.loads(response.content)
-            return {"text": text[:100], "categories": parsed.get("categories", [])}
+            parsed = _json.loads(content)
+            return {
+                "text": text[:100],
+                "categories": parsed.get("categories", []),
+                "tool_calls": result["tool_calls"],
+                "tools_used": result["tools_used"],
+            }
         except Exception:
-            return {"text": text[:100], "categories": [], "raw": response.content.strip()}
+            return {
+                "text": text[:100],
+                "categories": [],
+                "raw": content.strip(),
+                "tool_calls": result["tool_calls"],
+                "tools_used": result["tools_used"],
+            }
 
     def extract(self, text: str, field: str = "key_points", **kwargs) -> Dict[str, Any]:
         """Extract specific information from text."""
@@ -183,11 +212,17 @@ class AssistantAgent(BaseAgent):
 {text}
 
 请用清晰的列表形式输出提取结果。"""
-        response = self.llm.invoke([
-            SystemMessage(content=ASSISTANT_SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
-        ])
-        return {"field": field, "extracted": response.content.strip(), "source_length": len(text)}
+        result = self.invoke_with_tools(
+            [HumanMessage(content=prompt)],
+            system_prompt=ASSISTANT_SYSTEM_PROMPT,
+        )
+        return {
+            "field": field,
+            "extracted": result["content"].strip(),
+            "source_length": len(text),
+            "tool_calls": result["tool_calls"],
+            "tools_used": result["tools_used"],
+        }
 
     def translate(self, text: str, target_lang: str = "中文", **kwargs) -> Dict[str, Any]:
         """Translate text to target language."""
@@ -197,11 +232,17 @@ class AssistantAgent(BaseAgent):
 {text}
 
 请直接输出翻译结果。"""
-        response = self.llm.invoke([
-            SystemMessage(content=ASSISTANT_SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
-        ])
-        return {"translated": response.content.strip(), "original": text, "target_lang": target_lang}
+        result = self.invoke_with_tools(
+            [HumanMessage(content=prompt)],
+            system_prompt=ASSISTANT_SYSTEM_PROMPT,
+        )
+        return {
+            "translated": result["content"].strip(),
+            "original": text,
+            "target_lang": target_lang,
+            "tool_calls": result["tool_calls"],
+            "tools_used": result["tools_used"],
+        }
 
     def _freeform(self, text: str, instruction: str) -> str:
         """Handle freeform tasks."""
@@ -211,8 +252,8 @@ class AssistantAgent(BaseAgent):
 {text}
 
 请执行上述任务。"""
-        response = self.llm.invoke([
-            SystemMessage(content=ASSISTANT_SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
-        ])
-        return response.content.strip()
+        result = self.invoke_with_tools(
+            [HumanMessage(content=prompt)],
+            system_prompt=ASSISTANT_SYSTEM_PROMPT,
+        )
+        return result["content"].strip()

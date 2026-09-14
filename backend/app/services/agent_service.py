@@ -213,6 +213,41 @@ class AgentService:
 
         return all_tools
 
+    def test_tool_call(self, agent_id: int, prompt: str) -> dict:
+        """Test tool calling for an agent with a given prompt.
+
+        Instantiates the agent, runs invoke_with_tools, and returns
+        the full conversation for debugging / verification.
+        """
+        from app.agents.manager import AgentManager
+
+        agent = AgentManager.get_agent_instance(
+            db=self.db,
+            agent_id=agent_id,
+            require_enabled=False,
+        )
+        if agent is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="无法实例化智能体（可能未启用或 key 不存在）",
+            )
+
+        from langchain_core.messages import HumanMessage
+
+        result = agent.invoke_with_tools(
+            [HumanMessage(content=prompt)],
+            system_prompt=getattr(agent, "system_prompt", None),
+        )
+        return {
+            "agent_name": agent.name,
+            "prompt": prompt,
+            "final_response": result["content"],
+            "tool_calls_made": result["tool_calls"],
+            "tools_used": result["tools_used"],
+            "has_mcp_tools": agent.has_mcp_tools(),
+            "num_mcp_tools": len(agent.mcp_tools),
+        }
+
     def _validate_default_llm(self, config_id: Optional[int]) -> None:
         """Ensure an agent default references an existing text model."""
         if config_id is None:
