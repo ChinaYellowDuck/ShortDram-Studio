@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import AgentServiceDep, ProjectServiceDep, ScriptServiceDep
+from app.agents.manager import AgentManager
 from app.models.script import CharacterType, Emotion, IntExt, TimeOfDay
 from app.schemas.llm_config import LLMConfigResponse
 from app.schemas.project import ProjectCreate
@@ -104,13 +105,13 @@ async def agent_chat(
         llm_model_name = config.model_name
 
         if agent_key == "hello_agent":
-            from langchain_core.messages import HumanMessage
-
             from app.agents.hello_agent import HelloAgent
 
-            agent = HelloAgent(llm)
+            agent_inst = AgentManager(
+                db=agent_service.db
+            ).get_agent_instance(agent_key=agent_key) or HelloAgent(llm)
             input_data = {"messages": [HumanMessage(content=message)]}
-            result, run_id = await agent.ainvoke_with_run(
+            result, run_id = await agent_inst.ainvoke_with_run(
                 input_data=input_data,
                 db=agent_service.db,
                 agent_id=agent_id,
@@ -118,6 +119,8 @@ async def agent_chat(
                 llm_model_name=llm_model_name,
             )
             response = result.get("greeting", "")
+            tool_calls = 0
+            tools_used = []
 
         elif agent_key == "screenwriter":
             from app.agents.screenwriter import ScreenwriterAgent
@@ -127,11 +130,13 @@ async def agent_chat(
                 {"genre": "都市", "style": "", "num_scenes": 3},
                 provided_fields=set(),
             )
-            agent = ScreenwriterAgent(llm)
+            agent_inst = AgentManager(
+                db=agent_service.db
+            ).get_agent_instance(agent_key=agent_key) or ScreenwriterAgent(llm)
             input_data = _screenwriter_state(
                 message, params["genre"], params["style"], params["num_scenes"]
             )
-            result, run_id = await agent.ainvoke_with_run(
+            result, run_id = await agent_inst.ainvoke_with_run(
                 input_data=input_data,
                 db=agent_service.db,
                 agent_id=agent_id,
@@ -141,6 +146,8 @@ async def agent_chat(
             response = "\n\n".join(
                 part for part in (result.get("logline"), result.get("synopsis")) if part
             ).strip()
+            tool_calls = 0
+            tools_used = []
 
         elif agent_key == "producer":
             from app.agents.producer import ProducerAgent
@@ -150,11 +157,13 @@ async def agent_chat(
                 {"genre": "都市", "style": "", "num_scenes": 3},
                 provided_fields=set(),
             )
-            agent = ProducerAgent(llm)
+            agent_inst = AgentManager(
+                db=agent_service.db
+            ).get_agent_instance(agent_key=agent_key) or ProducerAgent(llm)
             input_data = _producer_state(
                 message, params["genre"], params["style"], params["num_scenes"], llm
             )
-            result, run_id = await agent.ainvoke_with_run(
+            result, run_id = await agent_inst.ainvoke_with_run(
                 input_data=input_data,
                 db=agent_service.db,
                 agent_id=agent_id,
@@ -171,11 +180,56 @@ async def agent_chat(
                 )
                 if part
             ).strip()
+            tool_calls = 0
+            tools_used = []
 
         else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Agent '{agent_key}' does not support chat",
+            # Generic agent chat - use invoke_with_tools for any registered agent
+            from langchain_core.messages import HumanMessage
+
+            mgr = AgentManager(db=agent_service.db)
+            agent_inst = mgr.get_agent_instance(agent_key=agent_key)
+            if not agent_inst:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Agent '{agent_key}' does not support chat or is not available",
+                )
+
+            # Use generic tool-enabled chat
+            system_prompt = getattr(agent_inst, "system_prompt", None)
+            tool_result = agent_inst.invoke_with_tools(
+                [HumanMessage(content=message)],
+                system_prompt=system_prompt,
+            )
+            response = tool_result["content"]
+            tool_calls = tool_result["tool_calls"]
+            tools_used = tool_result["tools_used"]
+
+            # Also create a run record for consistency
+            from app.schemas.agent import AgentRunCreate, AgentRunStepCreate
+
+            run = agent_service.create_run(
+                AgentRunCreate(
+                    agent_id=agent_id,
+                    llm_config_id=llm_config_id,
+                    llm_model_name=llm_model_name,
+                    input_summary=f"Chat: {message[:200]}",
+                )
+            )
+            run_id = run.id
+            agent_service.start_run(run_id)
+
+            step = agent_service.start_step(
+                run_id=run_id,
+                step_name="chat",
+                step_index=0,
+                input_summary=f"Message: {message[:200]}",
+            )
+            agent_service.complete_step(step.id, duration_ms=0)
+            agent_service.complete_run(
+                run_id,
+                output_summary=f"Response: {response[:200]}",
+                duration_ms=0,
             )
 
         return {
@@ -183,6 +237,9 @@ async def agent_chat(
             "run_id": run_id,
             "message": message,
             "response": response,
+            "tool_calls": tool_calls,
+            "tools_used": tools_used,
+            "has_mcp_tools": agent_inst.has_mcp_tools() if hasattr(agent_inst, 'has_mcp_tools') else False,
             "llm_config": {
                 "id": config.id,
                 "name": config.name,
